@@ -1,9 +1,11 @@
 
 import backpropCUDA
-import numpy
+import numpy as np
 
-vec = numpy.linspace(0,1,10)
+p=23
+n=4
+nn=n*n
 
-print("before: ", vec)
-backpropCUDA.multiply_with_scalar(vec, 10)
-print("after: ", vec)
+Wa = np.random.rand(p*nn).astype(np.float16).reshape([p, nn])*2.0-1.0
+Wb = np.random.rand(p*nn).astype(np.float16).reshape([p, nn])*2.0-1.0
+Wc = np.random.rand(p*nn).astype(np.float16).reshape([nn, p])*2.0-1.0
