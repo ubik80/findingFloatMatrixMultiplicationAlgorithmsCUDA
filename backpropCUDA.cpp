@@ -1,53 +1,48 @@
-#include <iostream>
-#include <pybind11/pybind11.h>
-#include <pybind11/numpy.h>
-#include <pybind11/stl.h>
+#include <algorithm>
+#include <chrono>
 #include <cuda_runtime.h>
+#include <iostream>
+#include <pybind11/numpy.h>
+#include <pybind11/pybind11.h>
+#include <pybind11/stl.h>
+#include <random>
+#include <vector>
 
-void run_kernel(double *vec, double scalar, int num_elements);
+namespace py = pybind11;
 
-void multiply_with_scalar(pybind11::array_t<double> vec, double scalar)
-{
-  int size = 10;
-  double *gpu_ptr;
-  cudaError_t error = cudaMalloc(&gpu_ptr, size * sizeof(double));
+int runBackpropOnGPU(float *Wa, float *Wb, float *Wc, float *Ma, float *Mb,
+                     float *Mc, int maxNumOfIters, float _nueAB, float _nueC,
+                     float tol, int n, int p, int seed);
 
-  if (error != cudaSuccess) {
-    throw std::runtime_error(cudaGetErrorString(error));
-  }
-  auto ha = vec.request();
+int multipleBackpropMasked(py::array_t<float> _Wa, py::array_t<float> _Wb,
+                           py::array_t<float> _Wc, py::array_t<float> _Ma,
+                           py::array_t<float> _Mb, py::array_t<float> _Mc,
+                           int maxNumOfIters, float _nueAB, float _nueC,
+                           float tol, int seed) {
+  float nueAB = -_nueAB;
+  float nueC = -_nueC;
+  auto bufWa = _Wa.request();
+  auto bufWb = _Wb.request();
+  auto bufWc = _Wc.request();
+  auto bufMa = _Ma.request();
+  auto bufMb = _Mb.request();
+  auto bufMc = _Mc.request();
+  int nn = bufWa.shape[1];
+  int n = (int)sqrt(nn);
+  int p = bufWa.shape[0];
+  float *Wa = (float *)bufWa.ptr;
+  float *Wb = (float *)bufWb.ptr;
+  float *Wc = (float *)bufWc.ptr;
+  float *Ma = (float *)bufMa.ptr;
+  float *Mb = (float *)bufMb.ptr;
+  float *Mc = (float *)bufMc.ptr;
 
-  if (ha.ndim != 1) {
-    std::stringstream strstr;
-    strstr << "ha.ndim != 1" << std::endl;
-    strstr << "ha.ndim: " << ha.ndim << std::endl;
-    throw std::runtime_error(strstr.str());
-  }
-
-  double* ptr = reinterpret_cast<double*>(ha.ptr);
-  error = cudaMemcpy(gpu_ptr, ptr, size * sizeof(double), cudaMemcpyHostToDevice);
-  if (error != cudaSuccess) {
-    throw std::runtime_error(cudaGetErrorString(error));
-  }
-
-  run_kernel(gpu_ptr, scalar, size);
-
-  error = cudaMemcpy(ptr, gpu_ptr, size * sizeof(double), cudaMemcpyDeviceToHost);
-  if (error != cudaSuccess) {
-    throw std::runtime_error(cudaGetErrorString(error));
-  }
-
-  error = cudaFree(gpu_ptr);
-  if (error != cudaSuccess) {
-    throw std::runtime_error(cudaGetErrorString(error));
-  }
+  return runBackpropOnGPU(Wa, Wb, Wc, Ma, Mb, Mc, maxNumOfIters, nueAB, nueC,
+                          tol, n, p, seed);
 }
 
-PYBIND11_PLUGIN(backpropCUDA)
-{
-  pybind11::module m("example", "pybind example plugin");
-
-  m.def("multiply_with_scalar", multiply_with_scalar);
-
+PYBIND11_PLUGIN(backpropCUDA) {
+  py::module m("example", "pybind example plugin");
+  m.def("multipleBackpropMasked", multipleBackpropMasked);
   return m.ptr();
 }
