@@ -10,17 +10,16 @@
 
 namespace py = pybind11;
 
-int runBackpropOnGPU(float *Wa, float *Wb, float *Wc, float *Ma, float *Mb,
-                     float *Mc, int maxNumOfIters, float _nueAB, float _nueC,
-                     float tol, int n, int p, int seed);
+double runBackpropOnGPU(float *Wa, float *Wb, float *Wc, float *Ma, float *Mb,
+                        float *Mc, int maxNumOfIters, float _nueAB, float _nueC,
+                        float tol, int n, int p, int seed);
 
-int multipleBackpropMasked(py::array_t<float> _Wa, py::array_t<float> _Wb,
-                           py::array_t<float> _Wc, py::array_t<float> _Ma,
-                           py::array_t<float> _Mb, py::array_t<float> _Mc,
-                           int maxNumOfIters, float _nueAB, float _nueC,
-                           float tol, int seed) {
-  float nueAB = -_nueAB;
-  float nueC = -_nueC;
+template <typename T>
+T multipleBackpropMasked(py::array_t<T> _Wa, py::array_t<T> _Wb,
+                         py::array_t<T> _Wc, py::array_t<T> _Ma,
+                         py::array_t<T> _Mb, py::array_t<T> _Mc,
+                         int maxNumOfIters, T nueAB, T nueC, T tol, int seed) {
+
   auto bufWa = _Wa.request();
   auto bufWb = _Wb.request();
   auto bufWc = _Wc.request();
@@ -30,19 +29,34 @@ int multipleBackpropMasked(py::array_t<float> _Wa, py::array_t<float> _Wb,
   int nn = bufWa.shape[1];
   int n = (int)sqrt(nn);
   int p = bufWa.shape[0];
-  float *Wa = (float *)bufWa.ptr;
-  float *Wb = (float *)bufWb.ptr;
-  float *Wc = (float *)bufWc.ptr;
-  float *Ma = (float *)bufMa.ptr;
-  float *Mb = (float *)bufMb.ptr;
-  float *Mc = (float *)bufMc.ptr;
+  T *Wa = (T *)bufWa.ptr;
+  T *Wb = (T *)bufWb.ptr;
+  T *Wc = (T *)bufWc.ptr;
+  T *Ma = (T *)bufMa.ptr;
+  T *Mb = (T *)bufMb.ptr;
+  T *Mc = (T *)bufMc.ptr;
+  float *Waf = (float *)malloc(nn * p * sizeof(float));
+  float *Wbf = (float *)malloc(nn * p * sizeof(float));
+  float *Wcf = (float *)malloc(nn * p * sizeof(float));
+  float *Maf = (float *)malloc(nn * p * sizeof(float));
+  float *Mbf = (float *)malloc(nn * p * sizeof(float));
+  float *Mcf = (float *)malloc(nn * p * sizeof(float));
 
-  return runBackpropOnGPU(Wa, Wb, Wc, Ma, Mb, Mc, maxNumOfIters, nueAB, nueC,
-                          tol, n, p, seed);
+  for (int i = 0; i < p * nn; i++) {
+    Waf[i] = (float)Wa[i];
+    Wbf[i] = (float)Wb[i];
+    Wcf[i] = (float)Wc[i];
+    Maf[i] = (float)Ma[i];
+    Mbf[i] = (float)Mb[i];
+    Mcf[i] = (float)Mc[i];
+  }
+
+  return runBackpropOnGPU(Waf, Wbf, Wcf, Maf, Mbf, Mcf, maxNumOfIters,
+                          (float)nueAB, (float)nueC, (float)tol, n, p, seed);
 }
 
 PYBIND11_PLUGIN(backpropCUDA) {
-  py::module m("example", "pybind example plugin");
-  m.def("multipleBackpropMasked", multipleBackpropMasked);
+  py::module m("backprop on GPU", "backprop on GPU bybind11 plugin");
+  m.def("multipleBackpropMasked", multipleBackpropMasked<double>);
   return m.ptr();
 }

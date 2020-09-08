@@ -3,20 +3,23 @@ import backpropCUDA as bp
 import numpy as np
 
 p=23
-n=4
+n=3
 nn=n*n
 
-MA = np.ones([p, nn]).astype(np.float32)
-MB = np.ones([p, nn]).astype(np.float32)
-MC = np.ones([nn, p]).astype(np.float32)
+nueAB = 0.1
+nueC = 0.1
+tol = 0.01
+maxNumOfIters = 3000000;
 
-Wa = np.random.rand(p*nn).astype(np.float32).reshape([p, nn])*2.0-1.0
-Wb = np.random.rand(p*nn).astype(np.float32).reshape([p, nn])*2.0-1.0
-Wc = np.random.rand(p*nn).astype(np.float32).reshape([nn, p])*2.0-1.0
+MA = np.ones([p, nn])
+MB = np.ones([p, nn])
+MC = np.ones([nn, p])
 
-nueAB = np.float32(0.1)
-nueC = np.float32(0.1)
-tol = np.float32(0.01)
-maxNumOfIters = 100;
-
-bp.multipleBackpropMasked(Wa, Wb, Wc, MA, MB, MC, maxNumOfIters, nueAB, nueC, tol, 1234)
+success = -1
+iter = 0;
+while success < 0:
+    Wa = np.random.rand(p*nn).reshape([p, nn])*2.0-1.0
+    Wb = np.random.rand(p*nn).reshape([p, nn])*2.0-1.0
+    Wc = np.random.rand(p*nn).reshape([nn, p])*2.0-1.0
+    iter = iter+1
+    success = bp.multipleBackpropMasked(Wa, Wb, Wc, MA, MB, MC, maxNumOfIters, nueAB, nueC, tol, iter)
