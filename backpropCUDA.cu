@@ -6,10 +6,25 @@
 #include <sstream>
 #include <string>
 
+void checkForCudaError(int line) {
+  cudaError err = cudaGetLastError();
+  if (cudaSuccess != err)
+    fprintf(stderr, "cudaCheckError() failed in line %i:\t%s\n", line,
+            cudaGetErrorString(err));
+}
+
+__device__ void lock(int *mutex){
+  while (atomicCAS(mutex,0,1)!=0);
+}
+
+__device__ void unlock(int* mutex){
+  atomicExch(mutex,0);
+}
+
 __global__ void kernel(float *Wa, float *Wb, float *Wc, float *Ma, float *Mb,
                        float *Mc, int maxNumOfIters, float nueAB, float nueC,
-                       float tol, int n, int p, int seed, float *ret,
-                       float *success) {
+                       float tol, int n, int p, int seed, float *finalError,
+                       int *mutex, int* killSignal) {
 
   const int threadId = threadIdx.x;
   const int blockId = blockIdx.x;
@@ -34,10 +49,8 @@ __global__ void kernel(float *Wa, float *Wb, float *Wc, float *Ma, float *Mb,
   cDiff = (float *)malloc(matrixSizeABC);
 
   int startVal = abs((seed + blockId * 3 + threadId * 7 +
-                      ((int)clock() / 10000000) % INT_MAX + (int)(*ret) * 23) %
+                      ((int)clock() / 10000000) % INT_MAX) %
                      INT_MAX);
-
-  // printf("seed %i \n", startVal);
 
   curandState_t state;
   curand_init(startVal, threadId + blockId, 11, &state);
@@ -100,24 +113,43 @@ __global__ void kernel(float *Wa, float *Wb, float *Wc, float *Ma, float *Mb,
     }
 
     err = sqrt(err);
-    if (iter % 1000000 == 0 && iter > 0) {
+    if (iter % (maxNumOfIters / 10) == 0 && iter > 0) {
       printf("block %i, thread %i, iter %i err = %f\n", blockId, threadId, iter,
              err);
     }
 
-    if (isnan(err) || isinf(err) || err > 1000 || *success > 0) {
+    if (isnan(err) || isinf(err) || err > 1000 || *killSignal == 1) {
       return;
     }
 
     if (err < tol) {
       inTolCount++;
       if (inTolCount > 100) {
-        *success = 1.0;
-        printf("beendet durch block %i, thread %i mit err = %f \n", blockId,
-               threadId, err);
+        lock(mutex);
+        if(*killSignal == 1){
+          unlock(mutex);
+          return;
+        }
+        if(err < *finalError){
+          *finalError = err;
+          *killSignal = 1;
+
+          for(int i = 0; i < nn*p; i++){
+            Wa[i] = myWa[i];
+            Wb[i] = myWb[i];
+            Wc[i] = myWc[i];
+          }
+
+          printf("beendet durch block %i, thread %i mit err = %f \n", blockId,
+                  threadId, err);
+          unlock(mutex);
+          return;
+        }
+        unlock(mutex);
         return;
       }
-    } else {
+    }
+    else {
       inTolCount = 0;
     }
 
@@ -147,19 +179,23 @@ __global__ void kernel(float *Wa, float *Wb, float *Wc, float *Ma, float *Mb,
 
 float runBackpropOnGPU(float *Wa, float *Wb, float *Wc, float *Ma, float *Mb,
                        float *Mc, int maxNumIters, float nueAB, float nueC,
-                       float tol, int n, int p, int seed) {
+                       float tol, int n, int p, int seed, int blocks, int threads) {
   std::cout << "runBackpropOnGPU n = " << n << ", p = " << p << '\n';
 
   int nn = n * n;
 
   float *WaGPU, *WbGPU, *WcGPU;
   float *MaGPU, *MbGPU, *McGPU;
-  float err, *errDevice, *successDevice;
-  float success = -1.0;
+  float *finalErrorDevice;
+  float finalError = tol + 1.0;
+  int *mutex, *killSignal;
 
-  cudaMalloc(&errDevice, sizeof(float));
-  cudaMalloc(&successDevice, sizeof(float));
+  cudaMalloc(&mutex, sizeof(int));
+  cudaMemset(mutex, 0, sizeof(int));
+  cudaMalloc(&killSignal, sizeof(int));
+  cudaMemset(killSignal, 0, sizeof(int));
 
+  cudaMalloc(&finalErrorDevice, sizeof(float));
   cudaMalloc(&WaGPU, nn * p * sizeof(float));
   cudaMalloc(&WbGPU, nn * p * sizeof(float));
   cudaMalloc(&WcGPU, nn * p * sizeof(float));
@@ -167,7 +203,7 @@ float runBackpropOnGPU(float *Wa, float *Wb, float *Wc, float *Ma, float *Mb,
   cudaMalloc(&MbGPU, nn * p * sizeof(float));
   cudaMalloc(&McGPU, nn * p * sizeof(float));
 
-  cudaMemcpy(successDevice, &success, sizeof(float), cudaMemcpyHostToDevice);
+  cudaMemcpy(finalErrorDevice, &finalError, sizeof(float), cudaMemcpyHostToDevice);
   cudaMemcpy(WaGPU, Wa, nn * p * sizeof(float), cudaMemcpyHostToDevice);
   cudaMemcpy(WbGPU, Wb, nn * p * sizeof(float), cudaMemcpyHostToDevice);
   cudaMemcpy(WcGPU, Wc, nn * p * sizeof(float), cudaMemcpyHostToDevice);
@@ -175,14 +211,17 @@ float runBackpropOnGPU(float *Wa, float *Wb, float *Wc, float *Ma, float *Mb,
   cudaMemcpy(MbGPU, Mb, nn * p * sizeof(float), cudaMemcpyHostToDevice);
   cudaMemcpy(McGPU, Mc, nn * p * sizeof(float), cudaMemcpyHostToDevice);
 
-  dim3 blockGrid(36);
-  dim3 threadGrid(32);
+  checkForCudaError(186);
+
+  dim3 blockGrid(blocks);
+  dim3 threadGrid(threads);
   kernel<<<blockGrid, threadGrid>>>(WaGPU, WbGPU, WcGPU, MaGPU, MbGPU, McGPU,
                                     maxNumIters, nueAB, nueC, tol, n, p, seed,
-                                    errDevice, successDevice);
+                                    finalErrorDevice, mutex, killSignal);
 
-  cudaMemcpy(&err, errDevice, sizeof(float), cudaMemcpyDeviceToHost);
-  cudaMemcpy(&success, successDevice, sizeof(float), cudaMemcpyDeviceToHost);
+  checkForCudaError(194);
+
+  cudaMemcpy(&finalError, finalErrorDevice, sizeof(float), cudaMemcpyDeviceToHost);
   cudaMemcpy(Wa, WaGPU, nn * p * sizeof(float), cudaMemcpyDeviceToHost);
   cudaMemcpy(Wb, WbGPU, nn * p * sizeof(float), cudaMemcpyDeviceToHost);
   cudaMemcpy(Wc, WcGPU, nn * p * sizeof(float), cudaMemcpyDeviceToHost);
@@ -190,8 +229,9 @@ float runBackpropOnGPU(float *Wa, float *Wb, float *Wc, float *Ma, float *Mb,
   cudaMemcpy(Mb, MbGPU, nn * p * sizeof(float), cudaMemcpyDeviceToHost);
   cudaMemcpy(Mc, McGPU, nn * p * sizeof(float), cudaMemcpyDeviceToHost);
 
-  cudaFree(errDevice);
-  cudaFree(successDevice);
+  cudaFree(killSignal);
+  cudaFree(mutex);
+  cudaFree(finalErrorDevice);
   cudaFree(WaGPU);
   cudaFree(WbGPU);
   cudaFree(WcGPU);
@@ -200,5 +240,7 @@ float runBackpropOnGPU(float *Wa, float *Wb, float *Wc, float *Ma, float *Mb,
   cudaFree(McGPU);
   cudaThreadExit();
 
-  return success;
+  checkForCudaError(215);
+
+  return finalError;
 }

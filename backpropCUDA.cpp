@@ -10,15 +10,19 @@
 
 namespace py = pybind11;
 
-double runBackpropOnGPU(float *Wa, float *Wb, float *Wc, float *Ma, float *Mb,
-                        float *Mc, int maxNumOfIters, float _nueAB, float _nueC,
-                        float tol, int n, int p, int seed);
+float runBackpropOnGPU( float *Wa, float *Wb, float *Wc,
+                        float *Ma, float *Mb, float *Mc,
+                        int maxNumOfIters,
+                        float _nueAB, float _nueC, float tol,
+                        int n, int p, int seed,
+                        int blocks, int threads);
 
 template <typename T>
 T multipleBackpropMasked(py::array_t<T> _Wa, py::array_t<T> _Wb,
                          py::array_t<T> _Wc, py::array_t<T> _Ma,
                          py::array_t<T> _Mb, py::array_t<T> _Mc,
-                         int maxNumOfIters, T nueAB, T nueC, T tol, int seed) {
+                         int maxNumOfIters, T nueAB, T nueC, T tol, int seed,
+                         int blocks, int threads) {
 
   auto bufWa = _Wa.request();
   auto bufWb = _Wb.request();
@@ -51,8 +55,9 @@ T multipleBackpropMasked(py::array_t<T> _Wa, py::array_t<T> _Wb,
     Mcf[i] = (float)Mc[i];
   }
 
-  return runBackpropOnGPU(Waf, Wbf, Wcf, Maf, Mbf, Mcf, maxNumOfIters,
-                          (float)nueAB, (float)nueC, (float)tol, n, p, seed);
+  return (T)runBackpropOnGPU(Waf, Wbf, Wcf, Maf, Mbf, Mcf, maxNumOfIters,
+                          (float)nueAB, (float)nueC, (float)tol, n, p, seed,
+                          blocks, threads);
 }
 
 PYBIND11_PLUGIN(backpropCUDA) {
