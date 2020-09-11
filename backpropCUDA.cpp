@@ -55,7 +55,7 @@ T multipleBackpropMasked(py::array_t<T> _Wa, py::array_t<T> _Wb,
     Mcf[i] = (float)Mc[i];
   }
 
-  return (T)runBackpropOnGPU(Waf, Wbf, Wcf, Maf, Mbf, Mcf, maxNumOfIters,
+  return (T)runBackpropOnGPU(Waf, Wbf, Wcf, nullptr, nullptr, nullptr, maxNumOfIters,
                           (float)nueAB, (float)nueC, (float)tol, n, p, seed,
                           blocks, threads);
 }
