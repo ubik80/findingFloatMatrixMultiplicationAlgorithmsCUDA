@@ -5,6 +5,7 @@
 #include <limits>
 #include <sstream>
 #include <string>
+#include <float.h>
 
 void checkForCudaError(int line) {
   cudaError err = cudaGetLastError();
@@ -33,10 +34,24 @@ __device__ void freeGb(float** garbageDump, int garbageCounter){
   }
 }
 
+__device__ float GetDistance(float *Wa1, float *Wb1, float *Wc1,
+                             float *Wa2, float *Wb2, float *Wc2,
+                             int m){
+  float squareSum = 0.0;
+  for (int i = 0; i < m; i++){
+    squareSum +=  (Wa1[i] - Wa2[i]) * (Wa1[i] - Wa2[i]);
+    squareSum +=  (Wb1[i] - Wb2[i]) * (Wb1[i] - Wb2[i]);
+    squareSum +=  (Wc1[i] - Wc2[i]) * (Wc1[i] - Wc2[i]);
+  }
+
+  return sqrt(squareSum);
+}
+
 __global__ void kernel(float *Wa, float *Wb, float *Wc, float *Ma, float *Mb,
                        float *Mc, int maxNumOfIters, float nueAB, float nueC,
-                       float tol, int n, int p, int seed, float *finalError,
-                       int *mutex, int* killSignal, bool useMasks) {
+                       float tol, int n, int p, int seed, float *minDistance,
+                       int *mutex, int* killSignal, bool useMasks,
+                       int minDistanceOutOf, int* distanceCount) {
 
   float* garbageDump[10];
   int garbageCounter = 0;
@@ -142,22 +157,26 @@ __global__ void kernel(float *Wa, float *Wb, float *Wc, float *Ma, float *Mb,
           freeGb(garbageDump, garbageCounter);
           return;
         }
-        if(err < *finalError){
-          *finalError = err;
-          *killSignal = 1;
 
+        float distance = GetDistance(Wa, Wb, Wc, myWa, myWb, myWc, nn * p);
+
+        printf("kernel: Solved by block %i, thread %i with err = %f distance = %f.\n", blockId,
+                threadId, err, distance);
+
+        (*distanceCount)++;
+        if (*distanceCount >= minDistanceOutOf){
+          *killSignal = 1;
+        }
+
+        if(distance < *minDistance){
+          *minDistance = distance;
           for(int i = 0; i < nn*p; i++){
             Wa[i] = myWa[i];
             Wb[i] = myWb[i];
             Wc[i] = myWc[i];
           }
-
-          printf("kernel: Solved by block %i, thread %i with err = %f .\n", blockId,
-                  threadId, err);
-          unlock(mutex);
-          freeGb(garbageDump, garbageCounter);
-          return;
         }
+        
         unlock(mutex);
         freeGb(garbageDump, garbageCounter);
         return;
@@ -203,20 +222,20 @@ __global__ void kernel(float *Wa, float *Wb, float *Wc, float *Ma, float *Mb,
 float runBackpropOnGPU(float *Wa, float *Wb, float *Wc, float *Ma, float *Mb,
                        float *Mc, int maxNumIters, float nueAB, float nueC,
                        float tol, int n, int p, int seed, int blocks, int threads,
-                       bool useMasks) {
+                       bool useMasks, int minDistanceOutOf) {
 
   std::cout << "runBackpropOnGPU: n = " << n << ", p = " << p << '\n';
   std::cout << "runBackpropOnGPU: blocks = " << blocks << ", threads = " << threads << '\n';
-  std::cout << "runBackpropOnGPU: seed = " << seed << '\n';
+  std::cout << "runBackpropOnGPU: minDistanceOutOf = " << minDistanceOutOf << '\n';
   std::cout << "runBackpropOnGPU: masks on = " << useMasks << '\n';
 
   int nn = n * n;
 
   float *WaGPU, *WbGPU, *WcGPU;
   float *MaGPU, *MbGPU, *McGPU;
-  float *finalErrorDevice;
-  float finalError = tol + 1.0;
-  int *mutex, *killSignal;
+  float *minDistanceDevice;
+  float minDistance = FLT_MAX;
+  int *mutex, *killSignal, *distanceCount;
 
   size_t grantedMemSize;
   size_t demandedMemSize = (nn * p * 3 + nn * 4 + p * 3 ) * sizeof(float) * blocks * threads *2;
@@ -234,10 +253,12 @@ float runBackpropOnGPU(float *Wa, float *Wb, float *Wc, float *Ma, float *Mb,
   cudaMemset(mutex, 0, sizeof(int));
   cudaMalloc(&killSignal, sizeof(int));
   cudaMemset(killSignal, 0, sizeof(int));
+  cudaMalloc(&distanceCount, sizeof(int));
+  cudaMemset(distanceCount, 0, sizeof(int));
 
   checkForCudaError(224);
 
-  cudaMalloc(&finalErrorDevice, sizeof(float));
+  cudaMalloc(&minDistanceDevice, sizeof(float));
   cudaMalloc(&WaGPU, nn * p * sizeof(float));
   cudaMalloc(&WbGPU, nn * p * sizeof(float));
   cudaMalloc(&WcGPU, nn * p * sizeof(float));
@@ -247,7 +268,7 @@ float runBackpropOnGPU(float *Wa, float *Wb, float *Wc, float *Ma, float *Mb,
 
   checkForCudaError(234);
 
-  cudaMemcpy(finalErrorDevice, &finalError, sizeof(float), cudaMemcpyHostToDevice);
+  cudaMemcpy(minDistanceDevice, &minDistance, sizeof(float), cudaMemcpyHostToDevice);
   cudaMemcpy(WaGPU, Wa, nn * p * sizeof(float), cudaMemcpyHostToDevice);
   cudaMemcpy(WbGPU, Wb, nn * p * sizeof(float), cudaMemcpyHostToDevice);
   cudaMemcpy(WcGPU, Wc, nn * p * sizeof(float), cudaMemcpyHostToDevice);
@@ -261,12 +282,12 @@ float runBackpropOnGPU(float *Wa, float *Wb, float *Wc, float *Ma, float *Mb,
   dim3 threadGrid(threads);
   kernel<<<blockGrid, threadGrid>>>(WaGPU, WbGPU, WcGPU, MaGPU, MbGPU, McGPU,
                                     maxNumIters, nueAB, nueC, tol, n, p, seed,
-                                    finalErrorDevice, mutex, killSignal,
-                                    useMasks);
+                                    minDistanceDevice, mutex, killSignal,
+                                    useMasks, minDistanceOutOf, distanceCount);
 
   checkForCudaError(252);
 
-  cudaMemcpy(&finalError, finalErrorDevice, sizeof(float), cudaMemcpyDeviceToHost);
+  cudaMemcpy(&minDistance, minDistanceDevice, sizeof(float), cudaMemcpyDeviceToHost);
   cudaMemcpy(Wa, WaGPU, nn * p * sizeof(float), cudaMemcpyDeviceToHost);
   cudaMemcpy(Wb, WbGPU, nn * p * sizeof(float), cudaMemcpyDeviceToHost);
   cudaMemcpy(Wc, WcGPU, nn * p * sizeof(float), cudaMemcpyDeviceToHost);
@@ -275,7 +296,7 @@ float runBackpropOnGPU(float *Wa, float *Wb, float *Wc, float *Ma, float *Mb,
 
   cudaFree(killSignal);
   cudaFree(mutex);
-  cudaFree(finalErrorDevice);
+  cudaFree(minDistanceDevice);
   cudaFree(WaGPU);
   cudaFree(WbGPU);
   cudaFree(WcGPU);
@@ -286,6 +307,6 @@ float runBackpropOnGPU(float *Wa, float *Wb, float *Wc, float *Ma, float *Mb,
 
   checkForCudaError(272);
 
-  std::cout << "runBackpropOnGPU: finished, return value: " << finalError << '\n';
-  return finalError;
+  std::cout << "runBackpropOnGPU: finished, minDistance: " << minDistance << '\n';
+  return minDistance;
 }
