@@ -50,12 +50,12 @@ T multipleBackpropMasked(py::array_t<T> _Wa, py::array_t<T> _Wb,
     Waf[i] = (float)Wa[i];
     Wbf[i] = (float)Wb[i];
     Wcf[i] = (float)Wc[i];
-    // Maf[i] = (float)Ma[i];
-    // Mbf[i] = (float)Mb[i];
-    // Mcf[i] = (float)Mc[i];
+    Maf[i] = (float)Ma[i];
+    Mbf[i] = (float)Mb[i];
+    Mcf[i] = (float)Mc[i];
   }
 
-  double ret = (T)runBackpropOnGPU(Waf, Wbf, Wcf, nullptr, nullptr, nullptr, maxNumOfIters,
+  T ret = (T)runBackpropOnGPU(Waf, Wbf, Wcf, Maf, Mbf, Mcf, maxNumOfIters,
                           (float)nueAB, (float)nueC, (float)tol, n, p, seed,
                           blocks, threads);
 
@@ -63,10 +63,14 @@ T multipleBackpropMasked(py::array_t<T> _Wa, py::array_t<T> _Wb,
     Wa[i] = (T)Waf[i];
     Wb[i] = (T)Wbf[i];
     Wc[i] = (T)Wcf[i];
-    // Ma[i] = (float)Ma[i];
-    // Mb[i] = (float)Mb[i];
-    // Mc[i] = (float)Mc[i];
   }
+
+  free(Waf);
+  free(Wbf);
+  free(Wcf);
+  free(Maf);
+  free(Mbf);
+  free(Mcf);
 
   return ret;
 }
