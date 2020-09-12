@@ -1,6 +1,0 @@
-{
-    "commands": [
-        "*.cpp : cmake --build .",
-        "*.cu : cmake --build ."
-    ]
-}
