@@ -21,16 +21,22 @@ __device__ void unlock(int* mutex){
   atomicExch(mutex,0);
 }
 
-__device__ float* mallocGB(int numOfBytes, float** garbageDump, int garbageCounter){
-  garbageDump[garbageCounter] = (float*)malloc(numOfBytes);
+__device__ float* mallocGb(int numOfFloats, float** garbageDump, int garbageCounter){
+  garbageDump[garbageCounter] = (float*)malloc(numOfFloats * sizeof(float));
   garbageCounter++;
   return garbageDump[garbageCounter - 1];
+}
+
+__device__ void freeGb(float** garbageDump, int garbageCounter){
+  for(int i = 0; i < garbageCounter; i++){
+    free(garbageDump[i]);
+  }
 }
 
 __global__ void kernel(float *Wa, float *Wb, float *Wc, float *Ma, float *Mb,
                        float *Mc, int maxNumOfIters, float nueAB, float nueC,
                        float tol, int n, int p, int seed, float *finalError,
-                       int *mutex, int* killSignal) {
+                       int *mutex, int* killSignal, bool useMasks) {
 
   float* garbageDump[10];
   int garbageCounter = 0;
@@ -39,19 +45,19 @@ __global__ void kernel(float *Wa, float *Wb, float *Wc, float *Ma, float *Mb,
   const int blockId = blockIdx.x;
 
   const int nn = n * n;
-  float* myWa = (float *)malloc(nn * p * sizeof(float));
-  float* myWb = (float *)malloc(nn * p * sizeof(float));
-  float* myWc = (float *)malloc(nn * p * sizeof(float));
+  float* myWa = (float *)mallocGb(nn * p, garbageDump, garbageCounter);
+  float* myWb = (float *)mallocGb(nn * p, garbageDump, garbageCounter);
+  float* myWc = (float *)mallocGb(nn * p, garbageDump, garbageCounter);
   memcpy(myWa, Wa, nn * p * sizeof(float));
   memcpy(myWb, Wb, nn * p * sizeof(float));
   memcpy(myWc, Wc, nn * p * sizeof(float));
-  float* a = (float *)malloc(nn * sizeof(float));
-  float* b = (float *)malloc(nn * sizeof(float));
-  float* c = (float *)malloc(nn * sizeof(float));
-  float* aStar = (float *)malloc(p * sizeof(float));
-  float* bStar = (float *)malloc(p * sizeof(float));
-  float* cStar = (float *)malloc(p * sizeof(float));
-  float* cDiff = (float *)malloc(nn * sizeof(float));
+  float* a = (float *)mallocGb(nn, garbageDump, garbageCounter);
+  float* b = (float *)mallocGb(nn, garbageDump, garbageCounter);
+  float* c = (float *)mallocGb(nn, garbageDump, garbageCounter);
+  float* aStar = (float *)mallocGb(p, garbageDump, garbageCounter);
+  float* bStar = (float *)mallocGb(p, garbageDump, garbageCounter);
+  float* cStar = (float *)mallocGb(p, garbageDump, garbageCounter);
+  float* cDiff = (float *)mallocGb(nn, garbageDump, garbageCounter);
 
   int startVal = abs((seed + blockId * 3 + threadId * 7 +
                       ((int)clock() / 10000000) % INT_MAX) % INT_MAX);
@@ -117,22 +123,13 @@ __global__ void kernel(float *Wa, float *Wb, float *Wc, float *Ma, float *Mb,
     }
 
     err = sqrt(err);
-    if (iter % (maxNumOfIters / 10) == 0 && iter > 0) {
-      printf("block %i, thread %i, iter %i err = %f\n", blockId, threadId, iter,
+    if (iter % (max(maxNumOfIters / 10 , 100)) == 0 && iter > 0) {
+      printf("kernel: block %i, thread %i, iter %i err = %f\n", blockId, threadId, iter,
              err);
     }
 
     if (isnan(err) || isinf(err) || err > 1000 || *killSignal == 1) {
-      free(myWa);
-      free(myWb);
-      free(myWc);
-      free(a);
-      free(b);
-      free(c);
-      free(aStar);
-      free(bStar);
-      free(cStar);
-      free(cDiff);
+      freeGb(garbageDump, garbageCounter);
       return;
     }
 
@@ -142,16 +139,7 @@ __global__ void kernel(float *Wa, float *Wb, float *Wc, float *Ma, float *Mb,
         lock(mutex);
         if(*killSignal == 1){
           unlock(mutex);
-          free(myWa);
-          free(myWb);
-          free(myWc);
-          free(a);
-          free(b);
-          free(c);
-          free(aStar);
-          free(bStar);
-          free(cStar);
-          free(cDiff);
+          freeGb(garbageDump, garbageCounter);
           return;
         }
         if(err < *finalError){
@@ -164,32 +152,14 @@ __global__ void kernel(float *Wa, float *Wb, float *Wc, float *Ma, float *Mb,
             Wc[i] = myWc[i];
           }
 
-          printf("beendet durch block %i, thread %i mit err = %f \n", blockId,
+          printf("kernel: Solved by block %i, thread %i with err = %f .\n", blockId,
                   threadId, err);
           unlock(mutex);
-          free(myWa);
-          free(myWb);
-          free(myWc);
-          free(a);
-          free(b);
-          free(c);
-          free(aStar);
-          free(bStar);
-          free(cStar);
-          free(cDiff);
+          freeGb(garbageDump, garbageCounter);
           return;
         }
         unlock(mutex);
-        free(myWa);
-        free(myWb);
-        free(myWc);
-        free(a);
-        free(b);
-        free(c);
-        free(aStar);
-        free(bStar);
-        free(cStar);
-        free(cDiff);
+        freeGb(garbageDump, garbageCounter);
         return;
       }
     }
@@ -206,8 +176,13 @@ __global__ void kernel(float *Wa, float *Wb, float *Wc, float *Ma, float *Mb,
       float WCBStar = WcTCDiff * bStar[i] * nueAB;
       float WCAStar = WcTCDiff * aStar[i] * nueAB;
       for (int j = 0; j < nn; j++) {
-        myWa[i * nn + j] -= WCBStar * a[j] * Ma[i * nn + j];
-        myWb[i * nn + j] -= WCAStar * b[j] * Mb[i * nn + j];
+        if (useMasks){
+          myWa[i * nn + j] -= WCBStar * a[j] * Ma[i * nn + j];
+          myWb[i * nn + j] -= WCAStar * b[j] * Mb[i * nn + j];
+        } else {
+          myWa[i * nn + j] -= WCBStar * a[j];
+          myWb[i * nn + j] -= WCAStar * b[j];
+        }
       }
     }
 
@@ -215,7 +190,11 @@ __global__ void kernel(float *Wa, float *Wb, float *Wc, float *Ma, float *Mb,
     for (int i = 0; i < nn; i++) {
       float CDiffNue = cDiff[i] * nueC;
       for (int j = 0; j < p; j++) {
-        myWc[i * p + j] -= CDiffNue * cStar[j] * Mc[i * p + j];
+        if (useMasks){
+          myWc[i * p + j] -= CDiffNue * cStar[j] * Mc[i * p + j];
+        } else {
+          myWc[i * p + j] -= CDiffNue * cStar[j];
+        }
       }
     }
   } // iter
@@ -223,8 +202,13 @@ __global__ void kernel(float *Wa, float *Wb, float *Wc, float *Ma, float *Mb,
 
 float runBackpropOnGPU(float *Wa, float *Wb, float *Wc, float *Ma, float *Mb,
                        float *Mc, int maxNumIters, float nueAB, float nueC,
-                       float tol, int n, int p, int seed, int blocks, int threads) {
-  std::cout << "runBackpropOnGPU n = " << n << ", p = " << p << '\n';
+                       float tol, int n, int p, int seed, int blocks, int threads,
+                       bool useMasks) {
+
+  std::cout << "runBackpropOnGPU: n = " << n << ", p = " << p << '\n';
+  std::cout << "runBackpropOnGPU: blocks = " << blocks << ", threads = " << threads << '\n';
+  std::cout << "runBackpropOnGPU: seed = " << seed << '\n';
+  std::cout << "runBackpropOnGPU: masks on = " << useMasks << '\n';
 
   int nn = n * n;
 
@@ -239,19 +223,19 @@ float runBackpropOnGPU(float *Wa, float *Wb, float *Wc, float *Ma, float *Mb,
   cudaDeviceGetLimit(&grantedMemSize, cudaLimitMallocHeapSize);
   cudaDeviceSetLimit(cudaLimitMallocHeapSize, max(grantedMemSize , demandedMemSize));
   cudaDeviceGetLimit(&grantedMemSize, cudaLimitMallocHeapSize);
-  std::cout << "demandedMemSize = " << demandedMemSize << '\n';
-  std::cout << "grantedMemSize =  " << grantedMemSize << '\n';
+  std::cout << "runBackpropOnGPU: demandedMemSize = " << demandedMemSize << '\n';
+  std::cout << "runBackpropOnGPU: grantedMemSize =  " << grantedMemSize << '\n';
 
   if (grantedMemSize < demandedMemSize) return -9.0;
 
-  checkForCudaError(235);
+  checkForCudaError(217);
 
   cudaMalloc(&mutex, sizeof(int));
   cudaMemset(mutex, 0, sizeof(int));
   cudaMalloc(&killSignal, sizeof(int));
   cudaMemset(killSignal, 0, sizeof(int));
 
-  checkForCudaError(238);
+  checkForCudaError(224);
 
   cudaMalloc(&finalErrorDevice, sizeof(float));
   cudaMalloc(&WaGPU, nn * p * sizeof(float));
@@ -261,7 +245,7 @@ float runBackpropOnGPU(float *Wa, float *Wb, float *Wc, float *Ma, float *Mb,
   cudaMalloc(&MbGPU, nn * p * sizeof(float));
   cudaMalloc(&McGPU, nn * p * sizeof(float));
 
-  checkForCudaError(248);
+  checkForCudaError(234);
 
   cudaMemcpy(finalErrorDevice, &finalError, sizeof(float), cudaMemcpyHostToDevice);
   cudaMemcpy(WaGPU, Wa, nn * p * sizeof(float), cudaMemcpyHostToDevice);
@@ -271,22 +255,23 @@ float runBackpropOnGPU(float *Wa, float *Wb, float *Wc, float *Ma, float *Mb,
   cudaMemcpy(MbGPU, Mb, nn * p * sizeof(float), cudaMemcpyHostToDevice);
   cudaMemcpy(McGPU, Mc, nn * p * sizeof(float), cudaMemcpyHostToDevice);
 
-  checkForCudaError(258);
+  checkForCudaError(244);
 
   dim3 blockGrid(blocks);
   dim3 threadGrid(threads);
   kernel<<<blockGrid, threadGrid>>>(WaGPU, WbGPU, WcGPU, MaGPU, MbGPU, McGPU,
                                     maxNumIters, nueAB, nueC, tol, n, p, seed,
-                                    finalErrorDevice, mutex, killSignal);
+                                    finalErrorDevice, mutex, killSignal,
+                                    useMasks);
 
-  checkForCudaError(266);
+  checkForCudaError(252);
 
   cudaMemcpy(&finalError, finalErrorDevice, sizeof(float), cudaMemcpyDeviceToHost);
   cudaMemcpy(Wa, WaGPU, nn * p * sizeof(float), cudaMemcpyDeviceToHost);
   cudaMemcpy(Wb, WbGPU, nn * p * sizeof(float), cudaMemcpyDeviceToHost);
   cudaMemcpy(Wc, WcGPU, nn * p * sizeof(float), cudaMemcpyDeviceToHost);
 
-  checkForCudaError(273);
+  checkForCudaError(259);
 
   cudaFree(killSignal);
   cudaFree(mutex);
@@ -299,7 +284,8 @@ float runBackpropOnGPU(float *Wa, float *Wb, float *Wc, float *Ma, float *Mb,
   cudaFree(McGPU);
   cudaThreadExit();
 
-  checkForCudaError(286);
+  checkForCudaError(272);
 
+  std::cout << "runBackpropOnGPU: finished, return value: " << finalError << '\n';
   return finalError;
 }

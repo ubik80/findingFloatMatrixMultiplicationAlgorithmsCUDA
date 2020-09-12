@@ -15,14 +15,15 @@ float runBackpropOnGPU( float *Wa, float *Wb, float *Wc,
                         int maxNumOfIters,
                         float _nueAB, float _nueC, float tol,
                         int n, int p, int seed,
-                        int blocks, int threads);
+                        int blocks, int threads,
+                        bool useMasks);
 
 template <typename T>
 T multipleBackpropMasked(py::array_t<T> _Wa, py::array_t<T> _Wb,
                          py::array_t<T> _Wc, py::array_t<T> _Ma,
                          py::array_t<T> _Mb, py::array_t<T> _Mc,
                          int maxNumOfIters, T nueAB, T nueC, T tol, int seed,
-                         int blocks, int threads) {
+                         int blocks, int threads, bool useMasks) {
 
   auto bufWa = _Wa.request();
   auto bufWb = _Wb.request();
@@ -57,7 +58,7 @@ T multipleBackpropMasked(py::array_t<T> _Wa, py::array_t<T> _Wb,
 
   T ret = (T)runBackpropOnGPU(Waf, Wbf, Wcf, Maf, Mbf, Mcf, maxNumOfIters,
                           (float)nueAB, (float)nueC, (float)tol, n, p, seed,
-                          blocks, threads);
+                          blocks, threads, useMasks);
 
   for (int i = 0; i < p * nn; i++) {
     Wa[i] = (T)Waf[i];
