@@ -10,13 +10,10 @@
 
 namespace py = pybind11;
 
-float runBackpropOnGPU( float *Wa, float *Wb, float *Wc,
-                        float *Ma, float *Mb, float *Mc,
-                        int maxNumOfIters,
-                        float _nueAB, float _nueC, float tol,
-                        int n, int p, int seed,
-                        int blocks, int threads,
-                        bool useMasks, int minDistanceOutOf);
+float runBackpropOnGPU(float *Wa, float *Wb, float *Wc, float *Ma, float *Mb,
+                       float *Mc, int maxNumOfIters, float _nueAB, float _nueC,
+                       float tol, int n, int p, int seed, int blocks,
+                       int threads, bool useMasks, int minDistanceOutOf);
 
 template <typename T>
 T multipleBackpropMasked(py::array_t<T> _Wa, py::array_t<T> _Wb,
@@ -58,8 +55,8 @@ T multipleBackpropMasked(py::array_t<T> _Wa, py::array_t<T> _Wb,
   }
 
   T ret = (T)runBackpropOnGPU(Waf, Wbf, Wcf, Maf, Mbf, Mcf, maxNumOfIters,
-                          (float)nueAB, (float)nueC, (float)tol, n, p, seed,
-                          blocks, threads, useMasks, minDistanceOutOf);
+                              (float)nueAB, (float)nueC, (float)tol, n, p, seed,
+                              blocks, threads, useMasks, minDistanceOutOf);
 
   for (int i = 0; i < p * nn; i++) {
     Wa[i] = (T)Waf[i];

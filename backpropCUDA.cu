@@ -1,81 +1,69 @@
 #include <cuda_runtime.h>
 #include <curand.h>
 #include <curand_kernel.h>
+#include <float.h>
 #include <iostream>
 #include <limits>
 #include <sstream>
 #include <string>
-#include <float.h>
 
 void checkForCudaError(int line) {
   cudaError err = cudaGetLastError();
   if (cudaSuccess != err)
-    fprintf(stderr, "  --- in line %i:\t%s\n", line,
-            cudaGetErrorString(err));
+    fprintf(stderr, "  --- in line %i:\t%s\n", line, cudaGetErrorString(err));
 }
 
-__device__ void lock(int *mutex){
-  while (atomicCAS(mutex,0,1)!=0);
+__device__ void lock(int *mutex) {
+  while (atomicCAS(mutex, 0, 1) != 0) {
+  };
 }
 
-__device__ void unlock(int* mutex){
-  atomicExch(mutex,0);
-}
+__device__ void unlock(int *mutex) { atomicExch(mutex, 0); }
 
-__device__ float* mallocGb(int numOfFloats, float** garbageDump, int garbageCounter){
-  garbageDump[garbageCounter] = (float*)malloc(numOfFloats * sizeof(float));
+// memory allocation, remember pointer for cleanup later
+__device__ float *mallocGb(int numOfFloats, float **garbageDump,
+                           int garbageCounter) {
+  garbageDump[garbageCounter] = (float *)malloc(numOfFloats * sizeof(float));
   garbageCounter++;
   return garbageDump[garbageCounter - 1];
 }
 
-__device__ void freeGb(float** garbageDump, int garbageCounter){
-  for(int i = 0; i < garbageCounter; i++){
+// free all allocated
+__device__ void freeGb(float **garbageDump, int garbageCounter) {
+  for (int i = 0; i < garbageCounter; i++) {
     free(garbageDump[i]);
   }
-}
-
-__device__ float GetDistance(float *Wa1, float *Wb1, float *Wc1,
-                             float *Wa2, float *Wb2, float *Wc2,
-                             int m){
-  float squareSum = 0.0;
-  for (int i = 0; i < m; i++){
-    squareSum +=  (Wa1[i] - Wa2[i]) * (Wa1[i] - Wa2[i]);
-    squareSum +=  (Wb1[i] - Wb2[i]) * (Wb1[i] - Wb2[i]);
-    squareSum +=  (Wc1[i] - Wc2[i]) * (Wc1[i] - Wc2[i]);
-  }
-
-  return sqrt(squareSum);
 }
 
 __global__ void kernel(float *Wa, float *Wb, float *Wc, float *Ma, float *Mb,
                        float *Mc, int maxNumOfIters, float nueAB, float nueC,
                        float tol, int n, int p, int seed, float *minDistance,
-                       int *mutex, int* killSignal, bool useMasks,
-                       int minDistanceOutOf, int* distanceCount) {
-
-  float* garbageDump[10];
+                       int *mutex, int *killSignal, bool useMasks,
+                       int minDistanceOutOf, int *distanceCount) {
+  float *garbageDump[10];
   int garbageCounter = 0;
 
   const int threadId = threadIdx.x;
   const int blockId = blockIdx.x;
 
   const int nn = n * n;
-  float* myWa = (float *)mallocGb(nn * p, garbageDump, garbageCounter);
-  float* myWb = (float *)mallocGb(nn * p, garbageDump, garbageCounter);
-  float* myWc = (float *)mallocGb(nn * p, garbageDump, garbageCounter);
+  float *myWa = (float *)mallocGb(nn * p, garbageDump, garbageCounter);
+  float *myWb = (float *)mallocGb(nn * p, garbageDump, garbageCounter);
+  float *myWc = (float *)mallocGb(nn * p, garbageDump, garbageCounter);
   memcpy(myWa, Wa, nn * p * sizeof(float));
   memcpy(myWb, Wb, nn * p * sizeof(float));
   memcpy(myWc, Wc, nn * p * sizeof(float));
-  float* a = (float *)mallocGb(nn, garbageDump, garbageCounter);
-  float* b = (float *)mallocGb(nn, garbageDump, garbageCounter);
-  float* c = (float *)mallocGb(nn, garbageDump, garbageCounter);
-  float* aStar = (float *)mallocGb(p, garbageDump, garbageCounter);
-  float* bStar = (float *)mallocGb(p, garbageDump, garbageCounter);
-  float* cStar = (float *)mallocGb(p, garbageDump, garbageCounter);
-  float* cDiff = (float *)mallocGb(nn, garbageDump, garbageCounter);
+  float *a = (float *)mallocGb(nn, garbageDump, garbageCounter);
+  float *b = (float *)mallocGb(nn, garbageDump, garbageCounter);
+  float *c = (float *)mallocGb(nn, garbageDump, garbageCounter);
+  float *aStar = (float *)mallocGb(p, garbageDump, garbageCounter);
+  float *bStar = (float *)mallocGb(p, garbageDump, garbageCounter);
+  float *cStar = (float *)mallocGb(p, garbageDump, garbageCounter);
+  float *cDiff = (float *)mallocGb(nn, garbageDump, garbageCounter);
 
   int startVal = abs((seed + blockId * 3 + threadId * 7 +
-                      ((int)clock() / 10000000) % INT_MAX) % INT_MAX);
+                      ((int)clock() / 10000000) % INT_MAX) %
+                     INT_MAX);
 
   curandState_t state;
   curand_init(startVal, threadId + blockId, 11, &state);
@@ -138,9 +126,9 @@ __global__ void kernel(float *Wa, float *Wb, float *Wc, float *Ma, float *Mb,
     }
 
     err = sqrt(err);
-    if (iter % (max(maxNumOfIters / 10 , 100)) == 0 && iter > 0) {
-      printf("kernel: block %i, thread %i, iter %i err = %f\n", blockId, threadId, iter,
-             err);
+    if (iter % (max(maxNumOfIters / 10, 100)) == 0 && iter > 0) {
+      printf("kernel: block %i, thread %i, iter %i err = %f\n", blockId,
+             threadId, iter, err);
     }
 
     if (isnan(err) || isinf(err) || err > 1000 || *killSignal == 1) {
@@ -150,39 +138,45 @@ __global__ void kernel(float *Wa, float *Wb, float *Wc, float *Ma, float *Mb,
 
     if (err < tol) {
       inTolCount++;
-      if (inTolCount > 100) {
+      if (inTolCount > 10000) {
         lock(mutex);
-        if(*killSignal == 1){
+        if (*killSignal == 1) {
           unlock(mutex);
           freeGb(garbageDump, garbageCounter);
           return;
         }
 
-        float distance = GetDistance(Wa, Wb, Wc, myWa, myWb, myWc, nn * p);
+        float distance = 0.0;
+        for (int i = 0; i < nn * p; i++) {
+          distance += (Wa[i] - myWa[i]) * (Wa[i] - myWa[i]);
+          distance += (Wb[i] - myWb[i]) * (Wb[i] - myWb[i]);
+          distance += (Wc[i] - myWc[i]) * (Wc[i] - myWc[i]);
+        }
+        distance = sqrt(distance);
 
-        printf("kernel: Solved by block %i, thread %i with err = %f distance = %f.\n", blockId,
-                threadId, err, distance);
+        printf("kernel: Solved by block %i, thread %i with err = %f distance = "
+               "%f.\n",
+               blockId, threadId, err, distance);
 
         (*distanceCount)++;
-        if (*distanceCount >= minDistanceOutOf){
+        if (*distanceCount >= minDistanceOutOf) {
           *killSignal = 1;
         }
 
-        if(distance < *minDistance){
+        if (distance < *minDistance) {
           *minDistance = distance;
-          for(int i = 0; i < nn*p; i++){
+          for (int i = 0; i < nn * p; i++) {
             Wa[i] = myWa[i];
             Wb[i] = myWb[i];
             Wc[i] = myWc[i];
           }
         }
-        
+
         unlock(mutex);
         freeGb(garbageDump, garbageCounter);
         return;
       }
-    }
-    else {
+    } else {
       inTolCount = 0;
     }
 
@@ -195,7 +189,7 @@ __global__ void kernel(float *Wa, float *Wb, float *Wc, float *Ma, float *Mb,
       float WCBStar = WcTCDiff * bStar[i] * nueAB;
       float WCAStar = WcTCDiff * aStar[i] * nueAB;
       for (int j = 0; j < nn; j++) {
-        if (useMasks){
+        if (useMasks) {
           myWa[i * nn + j] -= WCBStar * a[j] * Ma[i * nn + j];
           myWb[i * nn + j] -= WCAStar * b[j] * Mb[i * nn + j];
         } else {
@@ -209,7 +203,7 @@ __global__ void kernel(float *Wa, float *Wb, float *Wc, float *Ma, float *Mb,
     for (int i = 0; i < nn; i++) {
       float CDiffNue = cDiff[i] * nueC;
       for (int j = 0; j < p; j++) {
-        if (useMasks){
+        if (useMasks) {
           myWc[i * p + j] -= CDiffNue * cStar[j] * Mc[i * p + j];
         } else {
           myWc[i * p + j] -= CDiffNue * cStar[j];
@@ -217,16 +211,19 @@ __global__ void kernel(float *Wa, float *Wb, float *Wc, float *Ma, float *Mb,
       }
     }
   } // iter
-} // kernel
+} // kernel()
 
+// memory operations and starting of kernels on GPU
 float runBackpropOnGPU(float *Wa, float *Wb, float *Wc, float *Ma, float *Mb,
                        float *Mc, int maxNumIters, float nueAB, float nueC,
-                       float tol, int n, int p, int seed, int blocks, int threads,
-                       bool useMasks, int minDistanceOutOf) {
+                       float tol, int n, int p, int seed, int blocks,
+                       int threads, bool useMasks, int minDistanceOutOf) {
 
   std::cout << "runBackpropOnGPU: n = " << n << ", p = " << p << '\n';
-  std::cout << "runBackpropOnGPU: blocks = " << blocks << ", threads = " << threads << '\n';
-  std::cout << "runBackpropOnGPU: minDistanceOutOf = " << minDistanceOutOf << '\n';
+  std::cout << "runBackpropOnGPU: blocks = " << blocks
+            << ", threads = " << threads << '\n';
+  std::cout << "runBackpropOnGPU: minDistanceOutOf = " << minDistanceOutOf
+            << '\n';
   std::cout << "runBackpropOnGPU: masks on = " << useMasks << '\n';
 
   int nn = n * n;
@@ -238,14 +235,18 @@ float runBackpropOnGPU(float *Wa, float *Wb, float *Wc, float *Ma, float *Mb,
   int *mutex, *killSignal, *distanceCount;
 
   size_t grantedMemSize;
-  size_t demandedMemSize = (nn * p * 3 + nn * 4 + p * 3 ) * sizeof(float) * blocks * threads *2;
+  size_t demandedMemSize =
+      (nn * p * 3 + nn * 4 + p * 3) * sizeof(float) * blocks * threads * 2;
   cudaDeviceGetLimit(&grantedMemSize, cudaLimitMallocHeapSize);
-  cudaDeviceSetLimit(cudaLimitMallocHeapSize, max(grantedMemSize , demandedMemSize));
+  cudaDeviceSetLimit(cudaLimitMallocHeapSize,
+                     max(grantedMemSize, demandedMemSize));
   cudaDeviceGetLimit(&grantedMemSize, cudaLimitMallocHeapSize);
-  std::cout << "runBackpropOnGPU: demandedMemSize = " << demandedMemSize << '\n';
+  std::cout << "runBackpropOnGPU: demandedMemSize = " << demandedMemSize
+            << '\n';
   std::cout << "runBackpropOnGPU: grantedMemSize =  " << grantedMemSize << '\n';
 
-  if (grantedMemSize < demandedMemSize) return -9.0;
+  if (grantedMemSize < demandedMemSize)
+    return -9.0; // mem. allocation declined
 
   checkForCudaError(217);
 
@@ -256,8 +257,6 @@ float runBackpropOnGPU(float *Wa, float *Wb, float *Wc, float *Ma, float *Mb,
   cudaMalloc(&distanceCount, sizeof(int));
   cudaMemset(distanceCount, 0, sizeof(int));
 
-  checkForCudaError(224);
-
   cudaMalloc(&minDistanceDevice, sizeof(float));
   cudaMalloc(&WaGPU, nn * p * sizeof(float));
   cudaMalloc(&WbGPU, nn * p * sizeof(float));
@@ -266,9 +265,8 @@ float runBackpropOnGPU(float *Wa, float *Wb, float *Wc, float *Ma, float *Mb,
   cudaMalloc(&MbGPU, nn * p * sizeof(float));
   cudaMalloc(&McGPU, nn * p * sizeof(float));
 
-  checkForCudaError(234);
-
-  cudaMemcpy(minDistanceDevice, &minDistance, sizeof(float), cudaMemcpyHostToDevice);
+  cudaMemcpy(minDistanceDevice, &minDistance, sizeof(float),
+             cudaMemcpyHostToDevice);
   cudaMemcpy(WaGPU, Wa, nn * p * sizeof(float), cudaMemcpyHostToDevice);
   cudaMemcpy(WbGPU, Wb, nn * p * sizeof(float), cudaMemcpyHostToDevice);
   cudaMemcpy(WcGPU, Wc, nn * p * sizeof(float), cudaMemcpyHostToDevice);
@@ -287,12 +285,11 @@ float runBackpropOnGPU(float *Wa, float *Wb, float *Wc, float *Ma, float *Mb,
 
   checkForCudaError(252);
 
-  cudaMemcpy(&minDistance, minDistanceDevice, sizeof(float), cudaMemcpyDeviceToHost);
+  cudaMemcpy(&minDistance, minDistanceDevice, sizeof(float),
+             cudaMemcpyDeviceToHost);
   cudaMemcpy(Wa, WaGPU, nn * p * sizeof(float), cudaMemcpyDeviceToHost);
   cudaMemcpy(Wb, WbGPU, nn * p * sizeof(float), cudaMemcpyDeviceToHost);
   cudaMemcpy(Wc, WcGPU, nn * p * sizeof(float), cudaMemcpyDeviceToHost);
-
-  checkForCudaError(259);
 
   cudaFree(killSignal);
   cudaFree(mutex);
@@ -307,6 +304,7 @@ float runBackpropOnGPU(float *Wa, float *Wb, float *Wc, float *Ma, float *Mb,
 
   checkForCudaError(272);
 
-  std::cout << "runBackpropOnGPU: finished, minDistance: " << minDistance << '\n';
+  std::cout << "runBackpropOnGPU: finished, minDistance: " << minDistance
+            << '\n';
   return minDistance;
 }

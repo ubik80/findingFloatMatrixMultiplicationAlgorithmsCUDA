@@ -1,6 +1,7 @@
 
 import numpy as np
 
-n = 3
-p = 27
-np.save("dims", [n,p])
+# for initial setting of problem size
+n = 4
+p = 4*4*4
+np.save("dims", [n, p])
