@@ -50,14 +50,25 @@ T multipleBackpropMasked(py::array_t<T> _Wa, py::array_t<T> _Wb,
     Waf[i] = (float)Wa[i];
     Wbf[i] = (float)Wb[i];
     Wcf[i] = (float)Wc[i];
-    Maf[i] = (float)Ma[i];
-    Mbf[i] = (float)Mb[i];
-    Mcf[i] = (float)Mc[i];
+    // Maf[i] = (float)Ma[i];
+    // Mbf[i] = (float)Mb[i];
+    // Mcf[i] = (float)Mc[i];
   }
 
-  return (T)runBackpropOnGPU(Waf, Wbf, Wcf, nullptr, nullptr, nullptr, maxNumOfIters,
+  double ret = (T)runBackpropOnGPU(Waf, Wbf, Wcf, nullptr, nullptr, nullptr, maxNumOfIters,
                           (float)nueAB, (float)nueC, (float)tol, n, p, seed,
                           blocks, threads);
+
+  for (int i = 0; i < p * nn; i++) {
+    Wa[i] = (T)Waf[i];
+    Wb[i] = (T)Wbf[i];
+    Wc[i] = (T)Wcf[i];
+    // Ma[i] = (float)Ma[i];
+    // Mb[i] = (float)Mb[i];
+    // Mc[i] = (float)Mc[i];
+  }
+
+  return ret;
 }
 
 PYBIND11_PLUGIN(backpropCUDA) {

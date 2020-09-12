@@ -236,7 +236,7 @@ float runBackpropOnGPU(float *Wa, float *Wb, float *Wc, float *Ma, float *Mb,
   std::cout << "demandedMemSize = " << demandedMemSize << '\n';
   std::cout << "grantedMemSize =  " << grantedMemSize << '\n';
 
-  if (grantedMemSize < demandedMemSize) return 9.0;
+  if (grantedMemSize < demandedMemSize) return -9.0;
 
   checkForCudaError(235);
 
