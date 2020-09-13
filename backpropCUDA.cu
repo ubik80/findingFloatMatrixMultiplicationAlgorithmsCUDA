@@ -126,7 +126,7 @@ __global__ void kernel(float *Wa, float *Wb, float *Wc, float *Ma, float *Mb,
     }
 
     err = sqrt(err);
-    if (iter % (max(maxNumOfIters / 10, 100)) == 0 && iter > 0) {
+    if (iter % (max(maxNumOfIters / 5, 100)) == 0 && iter > 0) {
       printf("kernel: block %i, thread %i, iter %i err = %f\n", blockId,
              threadId, iter, err);
     }
@@ -247,6 +247,8 @@ float runBackpropOnGPU(float *Wa, float *Wb, float *Wc, float *Ma, float *Mb,
 
   if (grantedMemSize < demandedMemSize)
     return -9.0; // mem. allocation declined
+
+  cudaFuncSetCacheConfig(kernel, cudaFuncCachePreferL1);
 
   checkForCudaError(217);
 
