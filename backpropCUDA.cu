@@ -83,13 +83,15 @@ __global__ void kernel(float *Wa, float *Wb, float *Wc, float *Ma, float *Mb,
       normB += b[i] * b[i];
     }
 
-    normA = 1.0 / sqrt(normA);
-    normB = 1.0 / sqrt(normB);
+    if (normA > 0.01 && normB > 0.01) {
+      normA = 1.0 / sqrt(normA);
+      normB = 1.0 / sqrt(normB);
 
-    // normieren a und b:
-    for (int i = 0; i < nn; i++) {
-      a[i] *= normA;
-      b[i] *= normB;
+      // normieren a und b:
+      for (int i = 0; i < nn; i++) {
+        a[i] *= normA;
+        b[i] *= normB;
+      }
     }
 
     // korrektes c
@@ -126,7 +128,7 @@ __global__ void kernel(float *Wa, float *Wb, float *Wc, float *Ma, float *Mb,
     }
 
     err = sqrt(err);
-    if (iter % (max(maxNumOfIters / 5, 100)) == 0 && iter > 0) {
+    if (iter % 500000 == 0 && iter > 0) {
       printf("kernel: block %i, thread %i, iter %i err = %f\n", blockId,
              threadId, iter, err);
     }
@@ -140,41 +142,45 @@ __global__ void kernel(float *Wa, float *Wb, float *Wc, float *Ma, float *Mb,
       inTolCount++;
       if (inTolCount > 10000) {
         lock(mutex);
-        if (*killSignal == 1) {
-          unlock(mutex);
-          freeGb(garbageDump, garbageCounter);
-          return;
-        }
+        // if (*killSignal == 1) {
+        //   unlock(mutex);
+        //   freeGb(garbageDump, garbageCounter);
+        //   return;
+        // }
 
-        float distance = 0.0;
-        for (int i = 0; i < nn * p; i++) {
-          distance += (Wa[i] - myWa[i]) * (Wa[i] - myWa[i]);
-          distance += (Wb[i] - myWb[i]) * (Wb[i] - myWb[i]);
-          distance += (Wc[i] - myWc[i]) * (Wc[i] - myWc[i]);
-        }
-        distance = sqrt(distance);
+        if (*killSignal != 1) {
 
-        printf("kernel: Solved by block %i, thread %i with err = %f distance = "
-               "%f.\n",
-               blockId, threadId, err, distance);
-
-        (*distanceCount)++;
-        if (*distanceCount >= minDistanceOutOf) {
-          *killSignal = 1;
-        }
-
-        if (distance < *minDistance) {
-          *minDistance = distance;
+          float distance = 0.0;
           for (int i = 0; i < nn * p; i++) {
-            Wa[i] = myWa[i];
-            Wb[i] = myWb[i];
-            Wc[i] = myWc[i];
+            distance += (Wa[i] - myWa[i]) * (Wa[i] - myWa[i]);
+            distance += (Wb[i] - myWb[i]) * (Wb[i] - myWb[i]);
+            distance += (Wc[i] - myWc[i]) * (Wc[i] - myWc[i]);
+          }
+          distance = sqrt(distance);
+
+          printf(
+              "kernel: Solved by block %i, thread %i with err = %f distance = "
+              "%f.\n",
+              blockId, threadId, err, distance);
+
+          (*distanceCount)++;
+          if (*distanceCount >= minDistanceOutOf) {
+            *killSignal = 1;
+          }
+
+          if (distance < *minDistance) {
+            *minDistance = distance;
+            for (int i = 0; i < nn * p; i++) {
+              Wa[i] = myWa[i];
+              Wb[i] = myWb[i];
+              Wc[i] = myWc[i];
+            }
           }
         }
 
         unlock(mutex);
-        freeGb(garbageDump, garbageCounter);
-        return;
+        // freeGb(garbageDump, garbageCounter);
+        // return;
       }
     } else {
       inTolCount = 0;
@@ -259,22 +265,40 @@ float runBackpropOnGPU(float *Wa, float *Wb, float *Wc, float *Ma, float *Mb,
   cudaMalloc(&distanceCount, sizeof(int));
   cudaMemset(distanceCount, 0, sizeof(int));
 
+  checkForCudaError(262);
+
   cudaMalloc(&minDistanceDevice, sizeof(float));
   cudaMalloc(&WaGPU, nn * p * sizeof(float));
   cudaMalloc(&WbGPU, nn * p * sizeof(float));
   cudaMalloc(&WcGPU, nn * p * sizeof(float));
-  cudaMalloc(&MaGPU, nn * p * sizeof(float));
-  cudaMalloc(&MbGPU, nn * p * sizeof(float));
-  cudaMalloc(&McGPU, nn * p * sizeof(float));
+
+  checkForCudaError(269);
+
+  if (useMasks) {
+    cudaMalloc(&MaGPU, nn * p * sizeof(float));
+    cudaMalloc(&MbGPU, nn * p * sizeof(float));
+    cudaMalloc(&McGPU, nn * p * sizeof(float));
+  } else {
+    MaGPU = nullptr;
+    MbGPU = nullptr;
+    McGPU = nullptr;
+  }
+
+  checkForCudaError(281);
 
   cudaMemcpy(minDistanceDevice, &minDistance, sizeof(float),
              cudaMemcpyHostToDevice);
   cudaMemcpy(WaGPU, Wa, nn * p * sizeof(float), cudaMemcpyHostToDevice);
   cudaMemcpy(WbGPU, Wb, nn * p * sizeof(float), cudaMemcpyHostToDevice);
   cudaMemcpy(WcGPU, Wc, nn * p * sizeof(float), cudaMemcpyHostToDevice);
-  cudaMemcpy(MaGPU, Ma, nn * p * sizeof(float), cudaMemcpyHostToDevice);
-  cudaMemcpy(MbGPU, Mb, nn * p * sizeof(float), cudaMemcpyHostToDevice);
-  cudaMemcpy(McGPU, Mc, nn * p * sizeof(float), cudaMemcpyHostToDevice);
+
+  checkForCudaError(289);
+
+  if (useMasks) {
+    cudaMemcpy(MaGPU, Ma, nn * p * sizeof(float), cudaMemcpyHostToDevice);
+    cudaMemcpy(MbGPU, Mb, nn * p * sizeof(float), cudaMemcpyHostToDevice);
+    cudaMemcpy(McGPU, Mc, nn * p * sizeof(float), cudaMemcpyHostToDevice);
+  }
 
   checkForCudaError(244);
 
@@ -299,9 +323,13 @@ float runBackpropOnGPU(float *Wa, float *Wb, float *Wc, float *Ma, float *Mb,
   cudaFree(WaGPU);
   cudaFree(WbGPU);
   cudaFree(WcGPU);
-  cudaFree(MaGPU);
-  cudaFree(MbGPU);
-  cudaFree(McGPU);
+
+  if (useMasks) {
+    cudaFree(MaGPU);
+    cudaFree(MbGPU);
+    cudaFree(McGPU);
+  }
+
   cudaThreadExit();
 
   checkForCudaError(272);

@@ -35,23 +35,40 @@ T multipleBackpropMasked(py::array_t<T> _Wa, py::array_t<T> _Wb,
   T *Wa = (T *)bufWa.ptr;
   T *Wb = (T *)bufWb.ptr;
   T *Wc = (T *)bufWc.ptr;
-  T *Ma = (T *)bufMa.ptr;
-  T *Mb = (T *)bufMb.ptr;
-  T *Mc = (T *)bufMc.ptr;
+  T *Ma, *Mb, *Mc;
+  if (useMasks) {
+    Ma = (T *)bufMa.ptr;
+    Mb = (T *)bufMb.ptr;
+    Mc = (T *)bufMc.ptr;
+  } else {
+    Ma = nullptr;
+    Mb = nullptr;
+    Mc = nullptr;
+  }
   float *Waf = (float *)malloc(nn * p * sizeof(float));
   float *Wbf = (float *)malloc(nn * p * sizeof(float));
   float *Wcf = (float *)malloc(nn * p * sizeof(float));
-  float *Maf = (float *)malloc(nn * p * sizeof(float));
-  float *Mbf = (float *)malloc(nn * p * sizeof(float));
-  float *Mcf = (float *)malloc(nn * p * sizeof(float));
+
+  float *Maf, *Mbf, *Mcf;
+  if (useMasks) {
+    float *Maf = (float *)malloc(nn * p * sizeof(float));
+    float *Mbf = (float *)malloc(nn * p * sizeof(float));
+    float *Mcf = (float *)malloc(nn * p * sizeof(float));
+  } else {
+    Maf = nullptr;
+    Mbf = nullptr;
+    Mcf = nullptr;
+  }
 
   for (int i = 0; i < p * nn; i++) {
     Waf[i] = (float)Wa[i];
     Wbf[i] = (float)Wb[i];
     Wcf[i] = (float)Wc[i];
-    Maf[i] = (float)Ma[i];
-    Mbf[i] = (float)Mb[i];
-    Mcf[i] = (float)Mc[i];
+    if (useMasks) {
+      Maf[i] = (float)Ma[i];
+      Mbf[i] = (float)Mb[i];
+      Mcf[i] = (float)Mc[i];
+    }
   }
 
   T ret = (T)runBackpropOnGPU(Waf, Wbf, Wcf, Maf, Mbf, Mcf, maxNumOfIters,
@@ -67,9 +84,12 @@ T multipleBackpropMasked(py::array_t<T> _Wa, py::array_t<T> _Wb,
   free(Waf);
   free(Wbf);
   free(Wcf);
-  free(Maf);
-  free(Mbf);
-  free(Mcf);
+
+  if (useMasks) {
+    free(Maf);
+    free(Mbf);
+    free(Mcf);
+  }
 
   return ret;
 }
