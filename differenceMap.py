@@ -8,10 +8,6 @@ import os
 import sys
 np.set_printoptions(precision=2, suppress=True)
 
-n=3;
-nn=n*n;
-p=23
-
 def checkSolution(W, tol):
     for i in range(100):
         a = np.random.rand(nn) * 2.0 - 1.0
@@ -42,30 +38,13 @@ def PB(Wa, Wb, Wc):
     minDistance = sys.float_info.max
     while minDistance > sys.float_info.max / 2.0: # while no solution found
         minDistance = bpC.multipleBackpropMasked(Wa, Wb, Wc, 0.0, 0.0, 0.0,
-                                    3000000, 0.1, 0.1, 0.01, 42, 36, 64, False, 5)
+                                    3000000, 0.1, 0.1, 0.01, 42, 36, 64, False, 1)
     print("PB finished")
     return Wa, Wb, Wc  # PB
 
 def initW(n, p):
     print("Initialisierung start")
     nn = int(n**2)
-
-    # minDistance = sys.float_info.max
-    # while minDistance > sys.float_info.max / 2.0: # while no solution found
-    #     Wa = np.random.rand(p*nn).reshape([p, nn])*2.0-1.0
-    #     Wb = np.random.rand(p*nn).reshape([p, nn])*2.0-1.0
-    #     Wc = np.random.rand(nn*p).reshape([nn, p])*2.0-1.0
-        #
-        # minDistance = bpC.multipleBackpropMasked(Wa, Wb, Wc, 0.0, 0.0, 0.0,
-        #                             3000000, 0.1, 0.1, 0.01, 42, 36, 64, False, 1)
-        #
-        # Wa[0,0]=1.0;
-        # Wb[1,1]=1.0;
-        # Wc[2,2]=1.0;
-        #
-        # minDistance = bpC.multipleBackpropMasked(Wa, Wb, Wc, 0.0, 0.0, 0.0,
-        #             3000000, 0.1, 0.1, 0.01, 42, 36, 64, False, 1)
-
     Wa = np.random.rand(p*nn).reshape([p, nn])*2.0-1.0
     Wb = np.random.rand(p*nn).reshape([p, nn])*2.0-1.0
     Wc = np.random.rand(nn*p).reshape([nn, p])*2.0-1.0
@@ -78,8 +57,6 @@ def diffMap(n, p):
     seed = int(time.time())+int(uuid.uuid4())
     np.random.seed(seed % 135790)
     Wa, Wb, Wc = initW(n, p)
-
-
     i = 0  # iteration
     diffs = []
     maxNumIters = 5000  # fits for n=3, p=23
@@ -101,10 +78,11 @@ def diffMap(n, p):
 
         if norm2Delta < 0.5:
             print(id, ", Lösung gefunden?")
-            WW = PA(PB(Wa,Wb,Wc)[0])
+            X = PB(Wa,Wb,Wc)
+            WW = PA(X[0], X[1], X[2])
             if checkSolution(WW,  0.00000001):
-                print(id, ".... Lösung korrekt")
-                np.save("solution", [Wa, Wb, Wc])
+                print(".... Lösung korrekt")
+                np.save("solution_n" + str(n) + "_p" + str(p), [Wa, Wb, Wc.T])
                 return
             else:
                 print(id, ".... keine gültige Lösung")
@@ -138,4 +116,4 @@ def diffMap(n, p):
 
 
 if __name__ == '__main__':
-    diffMap(n=2, p=7)
+    diffMap(n=3, p=23)
