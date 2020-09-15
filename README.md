@@ -19,6 +19,7 @@ https://github.com/pybind/pybind11
 use:
 - clone this repo,
 - clone the pybind11 repo
+- do you need to install nvidia CUDA toolkit?
 - cmake .
 - cmake --build .
 - set problem size / dims with: python3 setDims.py
