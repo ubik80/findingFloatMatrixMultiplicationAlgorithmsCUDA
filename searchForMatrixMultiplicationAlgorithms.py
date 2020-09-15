@@ -29,7 +29,7 @@ while True: # endlessly search for even better algorithms (lower p)
         iter = iter + 1
 
         # calculate solution on GPU
-        error = bp.multipleBackpropMasked(Wa, Wb, Wc,
+        error = bp.backpropCUDA(Wa, Wb, Wc,
             maxNumOfIters, nueAB, nueC, tol, iter, numOfBlocks, numOfThreads)
 
         # check if result is plausible
