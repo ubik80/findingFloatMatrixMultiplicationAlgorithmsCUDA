@@ -17,31 +17,23 @@ nueAB = 0.1 # learning rate for Wa and Wb
 nueC = 0.1 # learning rate for Wc
 tol = 0.01 # tolerance for error in C (2-norm)
 maxNumOfIters = 3000000 # max number of iterations for backpropCUDA
-useMasks = False # false - ignore
-minDistanceOutOf = 1 # pool of solutions from which to choose the one with min.
-# distance between initial values and solution
-
-MA = np.ones([p, nn]) # Mask for Ma, 0.0 - don't change, 1.0 - can be changed
-MB = np.ones([p, nn])
-MC = np.ones([nn, p])
 
 while True: # endlessly search for even better algorithms (lower p)
-    minDistance = sys.float_info.max
+    error = sys.float_info.max
     iter = 0;
 
-    while minDistance > sys.float_info.max / 2.0: # while no solution found
+    while error > sys.float_info.max / 2.0: # while no solution found
         Wa = np.random.rand(p * nn).reshape([p, nn]) * 2.0 - 1.0
         Wb = np.random.rand(p * nn).reshape([p, nn]) * 2.0 - 1.0
         Wc = np.random.rand(p * nn).reshape([nn, p]) * 2.0 - 1.0
         iter = iter + 1
 
         # calculate solution on GPU
-        minDistance = bp.multipleBackpropMasked(Wa, Wb, Wc, MA, MB, MC,
-            maxNumOfIters, nueAB, nueC, tol, iter, numOfBlocks, numOfThreads,
-            useMasks, minDistanceOutOf)
+        error = bp.multipleBackpropMasked(Wa, Wb, Wc,
+            maxNumOfIters, nueAB, nueC, tol, iter, numOfBlocks, numOfThreads)
 
         # check if result is plausible
-        if Wa.size < nn * p or Wb.size < nn * p or Wc.size < nn * p or minDistance <= 0.0:
+        if Wa.size < nn * p or Wb.size < nn * p or Wc.size < nn * p or error < 0.0 or error > tol * 1.1:
             print ("corrupted output")
             quit()
 
