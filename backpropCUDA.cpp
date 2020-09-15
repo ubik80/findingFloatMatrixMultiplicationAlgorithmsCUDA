@@ -13,9 +13,9 @@ float runBackpropOnGPU(float *Wa, float *Wb, float *Wc, int maxNumIters,
 
 // to be called from python, through pybind11
 template <typename T>
-T multipleBackpropMasked(py::array_t<T> _Wa, py::array_t<T> _Wb,
-                         py::array_t<T> _Wc, int maxNumOfIters, T nueAB, T nueC,
-                         T tol, int seed, int blocks, int threads) {
+T backpropCUDA(py::array_t<T> _Wa, py::array_t<T> _Wb, py::array_t<T> _Wc,
+               int maxNumOfIters, T nueAB, T nueC, T tol, int seed, int blocks,
+               int threads) {
 
   auto bufWa = _Wa.request();
   auto bufWb = _Wb.request();
@@ -56,6 +56,6 @@ T multipleBackpropMasked(py::array_t<T> _Wa, py::array_t<T> _Wb,
 
 PYBIND11_PLUGIN(backpropCUDA) {
   py::module m("backprop on GPU", "backprop on GPU bybind11 plugin");
-  m.def("multipleBackpropMasked", multipleBackpropMasked<double>);
+  m.def("backpropCUDA", backpropCUDA<double>);
   return m.ptr();
 }
