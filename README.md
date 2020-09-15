@@ -16,5 +16,13 @@ The solution was developed and tested on:
 pybind11 cloned from:
 https://github.com/pybind/pybind11
 
+use:
+- clone this repo,
+- clone the pybind11 repo
+- cmake .
+- cmake --build .
+- set problem size / dims with: python3 setDims.py
+- start with: python3 searchForMatrixMultiplicationAlgorithms
+
 
 
