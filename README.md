@@ -22,7 +22,7 @@ use:
 - do you need to install nvidia CUDA toolkit?
 - cmake .
 - cmake --build .
-- set problem size / dims with: python3 setDims.py
+- set problem size / dims with: python3 setNAndP.py
 - start with: python3 searchForMatrixMultiplicationAlgorithms
 
 
