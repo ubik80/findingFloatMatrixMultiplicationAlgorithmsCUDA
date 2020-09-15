@@ -122,7 +122,7 @@ __global__ void kernel(float *Wa, float *Wb, float *Wc, int maxNumOfIters,
       return;
     }
 
-    if (iter % max((int)(maxNumOfIters / 10), 1000) == 0 && iter > 0) {
+    if (iter % max((int)(maxNumOfIters / 5), 1000) == 0 && iter > 0) {
       printf("kernel: block %i, thread %i, iter %i err = %f\n", blockId,
              threadId, iter, err);
     }
