@@ -81,7 +81,7 @@ __global__ void kernel(float *Wa, float *Wb, float *Wc, int maxNumOfIters,
       b[i] *= normB;
     }
 
-    // correct c (mat(c)=mat(a)*mat(b))
+    // calculate c (mat(c)=mat(a)*mat(b))
     for (int i = 0; i < n; i++) {
       for (int j = 0; j < n; j++) {
         c[i * n + j] = 0.0;
