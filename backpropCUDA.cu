@@ -104,7 +104,7 @@ __global__ void kernel(float *Wa, float *Wb, float *Wc, int maxNumOfIters,
 
     float err = 0.0;
 
-    // c_wave - c  .. Fehler in c
+    // c_wave - c  .. error in c
     for (int i = 0; i < nn; i++) {
       float cWave = 0.0;
       for (int k = 0; k < p; k++) {
