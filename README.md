@@ -12,6 +12,8 @@ Starting from the same starting point, we iterate on many kernels until we find 
 - let each kernel start at a different starting point (not usable in a projection algorithm).
 - calculate several solutions, starting from the same starting point, and chooose the one with the smallest distanct to the starting point. This could be useful to calculate the solution with the smallest projection distance (see document mentioned above). 
 
+The code is not optimized, yet.
+
 The solution was developed and tested on:
 - ubuntu 18.04.5
 - python 3.6.9
