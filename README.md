@@ -4,10 +4,10 @@ CUDA implementation of backpropagation for finding matrix-multiplication-algorit
 For further understanding of the subject look at: 
 https://www.researchgate.net/publication/341942316_Searching_for_fast_matrix_multiplication_algorithms
 
-This implementation finds the float solutions, for finding solutions in {-1, 0, 1}, have a look at:
+This implementation finds the float solutions. For finding solutions in {-1, 0, 1}, have a look at:
 https://github.com/ubik80/searching-for-fast-MM-algorithms
 
-with different (random) starting points, we iterate on many kernels until we find one solution.
+With different (random) starting points, we iterate on many kernels until we find one solution.
 
 The solution was developed and tested on:
 - ubuntu 18.04.5
