@@ -7,7 +7,6 @@ dims = np.load("dims.npy") # load the dimensions of the problem to solve
 n = dims [0] # matrix dimensions of A and B
 p = dims [1] # number of products
 nn = n * n
-
 p = p - 1 # problem already solved for p, now solve for p - 1
 
 numOfBlocks = 36; # number of CUDA blocks to use
@@ -18,24 +17,22 @@ nueC = 0.1 # learning rate for Wc
 tol = 0.01 # tolerance for error in C (2-norm)
 maxNumOfIters = 3000000 # max number of iterations for backpropCUDA
 
+Wa = np.ndarray(p * nn).reshape([p, nn]) # result is written here
+Wb = np.ndarray(p * nn).reshape([p, nn])
+Wc = np.ndarray(p * nn).reshape([nn, p])
+
 while True: # endlessly search for even better algorithms (lower p)
     error = sys.float_info.max
     iter = 0;
-
     while error > sys.float_info.max / 2.0: # while no solution found
-        Wa = np.random.rand(p * nn).reshape([p, nn]) * 2.0 - 1.0
-        Wb = np.random.rand(p * nn).reshape([p, nn]) * 2.0 - 1.0
-        Wc = np.random.rand(p * nn).reshape([nn, p]) * 2.0 - 1.0
         iter = iter + 1
-
         # calculate solution on GPU
-        error = bp.multipleBackpropMasked(Wa, Wb, Wc,
+        error = bp.backpropCUDA(Wa, Wb, Wc,
             maxNumOfIters, nueAB, nueC, tol, iter, numOfBlocks, numOfThreads)
-
         # check if result is plausible
         if Wa.size < nn * p or Wb.size < nn * p or Wc.size < nn * p or error < 0.0 or error > tol * 1.1:
             print ("corrupted output")
-            quit()
+            error = sys.float_info.max
 
     # check result through calculation
     for i in range(100):
@@ -53,6 +50,9 @@ while True: # endlessly search for even better algorithms (lower p)
             print ("err > tol, err = " + str(err))
             quit()
 
-    np.save("dims", [n, p]) # reduce p to increase problem
+    np.save("dims", [n, p]) 
     np.save("solution_n" + str(n) + "_p" + str(p), [Wa, Wb, Wc.T]) # save solution
     p = p - 1 # repeat with less products ...
+    Wa = np.ndarray(p * nn).reshape([p, nn])
+    Wb = np.ndarray(p * nn).reshape([p, nn])
+    Wc = np.ndarray(p * nn).reshape([nn, p])

@@ -30,13 +30,6 @@ T backpropCUDA(py::array_t<T> _Wa, py::array_t<T> _Wb, py::array_t<T> _Wc,
   float *Wbf = (float *)malloc(nn * p * sizeof(float));
   float *Wcf = (float *)malloc(nn * p * sizeof(float));
 
-  // we want float on the GPU
-  for (int i = 0; i < p * nn; i++) {
-    Waf[i] = (float)Wa[i];
-    Wbf[i] = (float)Wb[i];
-    Wcf[i] = (float)Wc[i];
-  }
-
   T ret =
       (T)runBackpropOnGPU(Waf, Wbf, Wcf, maxNumOfIters, (float)nueAB,
                           (float)nueC, (float)tol, n, p, seed, blocks, threads);

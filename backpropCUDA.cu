@@ -12,24 +12,133 @@ __device__ float *mallocGb(int numOfFloats, float **garbageDump,
   return garbageDump[garbageCounter - 1];
 }
 
-// free all allocated
+// free all allocated (pointers in garbageDump)
 __device__ void freeGb(float **garbageDump, int garbageCounter) {
   for (int i = 0; i < garbageCounter; i++) {
     free(garbageDump[i]);
   }
 }
 
+// to protect Wa, Wb, Wc and minError
 __device__ void lock(int *mutex) {
   while (atomicCAS(mutex, 0, 1) != 0) {
   };
 }
 
+// to protect Wa, Wb, Wc and minError
 __device__ void unlock(int *mutex) { atomicExch(mutex, 0); }
+
+// randomly initialize Wa, Wb, Wc
+__device__ void initializeWaWbWc(float *Wa, float *Wb, float *Wc,
+                                 curandState_t *state, int nn, int p) {
+  for (int i = 0; i < nn * p; i++) {
+    Wa[i] = 1.0 - (float)curand(state) / (float)INT_MAX;
+    Wb[i] = 1.0 - (float)curand(state) / (float)INT_MAX;
+    Wc[i] = 1.0 - (float)curand(state) / (float)INT_MAX;
+  }
+}
+
+// randomly set a and b, and scale to length 1
+__device__ void initializeAB(float *a, float *b, curandState_t *state, int nn,
+                             int p) {
+  float normA = 0.0;
+  float normB = 0.0;
+
+  do {
+    for (int i = 0; i < nn; i++) {
+      a[i] = 1.0 - (float)curand(state) / (float)INT_MAX;
+      b[i] = 1.0 - (float)curand(state) / (float)INT_MAX;
+      normA += a[i] * a[i];
+      normB += b[i] * b[i];
+    }
+  } while (normA < 0.1 or normB < 0.1);
+
+  normA = 1.0 / sqrt(normA);
+  normB = 1.0 / sqrt(normB);
+
+  for (int i = 0; i < nn; i++) {
+    a[i] *= normA;
+    b[i] *= normB;
+  }
+}
+
+// calculate c (mat(c)=mat(a)*mat(b))
+__device__ void calculateC(float *a, float *b, float *c, int n) {
+  for (int i = 0; i < n; i++) {
+    for (int j = 0; j < n; j++) {
+      c[i * n + j] = 0.0;
+      for (int k = 0; k < n; k++) {
+        c[i * n + j] += a[i * n + k] * b[k * n + j];
+      }
+    }
+  }
+}
+
+// c* = a* x b*
+__device__ void calculateCStar(float *Wa, float *Wb, float *aStar, float *bStar,
+                               float *cStar, float *a, float *b, int nn,
+                               int p) {
+  for (int i = 0; i < p; i++) {
+    aStar[i] = 0.0;
+    bStar[i] = 0.0;
+    for (int j = 0; j < nn; j++) {
+      aStar[i] += Wa[nn * i + j] * a[j];
+      bStar[i] += Wb[nn * i + j] * b[j];
+    }
+    cStar[i] = aStar[i] * bStar[i];
+  }
+}
+
+__device__ float calculateCDiffAndErr(float *c, float *cStar, float *Wc,
+                                      float *cDiff, int nn, int p) {
+  float cWave;
+  float err = 0.0;
+  for (int i = 0; i < nn; i++) {
+    cWave = 0.0;
+    for (int k = 0; k < p; k++) {
+      cWave += Wc[p * i + k] * cStar[k];
+    }
+    cDiff[i] = cWave - c[i]; // c_wave - c is the error in c
+    err += cDiff[i] * cDiff[i];
+  }
+  return sqrt(err);
+}
+
+// innovate Wa and Wb
+__device__ void innovateWaAndWb(float *aStar, float *bStar, float *a, float *b,
+                                float *cDiff, float *Wa, float *Wb, float *Wc,
+                                float nueAB, int nn, int p) {
+  float WcTCDiff, WCAStar, WCBStar;
+  for (int i = 0; i < p; i++) {
+    WcTCDiff = 0.0;
+    for (int j = 0; j < nn; j++) {
+      WcTCDiff += Wc[i + j * p] * cDiff[j];
+    }
+    WCBStar = WcTCDiff * bStar[i] * nueAB;
+    WCAStar = WcTCDiff * aStar[i] * nueAB;
+    for (int j = 0; j < nn; j++) {
+      Wa[i * nn + j] -= WCBStar * a[j];
+      Wb[i * nn + j] -= WCAStar * b[j];
+    }
+  }
+}
+
+// innovate Wc
+__device__ void innovateWc(float *cStar, float *cDiff, float *Wc, float nueC,
+                           int nn, int p) {
+  float CDiffNue;
+  for (int i = 0; i < nn; i++) {
+    CDiffNue = cDiff[i] * nueC;
+    for (int j = 0; j < p; j++) {
+      Wc[i * p + j] -= CDiffNue * cStar[j];
+    }
+  }
+}
 
 __global__ void kernel(float *Wa, float *Wb, float *Wc, int maxNumOfIters,
                        float nueAB, float nueC, float tol, int n, int p,
                        int seed, int *killSignal, int *mutex, float *minError) {
-  float *garbageDump[10];
+  float *garbageDump[10]; // for cleanup before return
   int garbageCounter = 0;
 
   const int threadId = threadIdx.x;
@@ -39,9 +148,6 @@ __global__ void kernel(float *Wa, float *Wb, float *Wc, int maxNumOfIters,
   float *myWa = (float *)mallocGb(nn * p, garbageDump, garbageCounter);
   float *myWb = (float *)mallocGb(nn * p, garbageDump, garbageCounter);
   float *myWc = (float *)mallocGb(nn * p, garbageDump, garbageCounter);
-  memcpy(myWa, Wa, nn * p * sizeof(float));
-  memcpy(myWb, Wb, nn * p * sizeof(float));
-  memcpy(myWc, Wc, nn * p * sizeof(float));
   float *a = (float *)mallocGb(nn, garbageDump, garbageCounter);
   float *b = (float *)mallocGb(nn, garbageDump, garbageCounter);
   float *c = (float *)mallocGb(nn, garbageDump, garbageCounter);
@@ -50,108 +156,53 @@ __global__ void kernel(float *Wa, float *Wb, float *Wc, int maxNumOfIters,
   float *cStar = (float *)mallocGb(p, garbageDump, garbageCounter);
   float *cDiff = (float *)mallocGb(nn, garbageDump, garbageCounter);
 
-  int startVal = abs((seed + blockId * 3 + threadId * 7 +
-                      ((int)clock() / 10000000) % INT_MAX) %
-                     INT_MAX);
+  int startVal =
+      abs((seed + blockId * 3 + threadId * 7 + blockId * threadId * 11 +
+           ((int)clock() / 10000000) % INT_MAX) %
+          INT_MAX);
   curandState_t state;
-  curand_init(startVal, threadId + blockId, 11, &state);
+  curand_init(startVal, threadId + blockId, 13, &state);
 
-  int inTolCount = 0; // counts interations with err < tol
+  initializeWaWbWc(myWa, myWb, myWc, &state, nn, p);
+
+  int inTolCount = 0;                // counts iterations with err < tol
+  int printCount = 0;                // for cmdl output
+  int printFreq = maxNumOfIters / 5; // how often to print
+  float err;
+
   for (int iter = 0; iter < maxNumOfIters; iter++) {
 
-    float normA = 0.0;
-    float normB = 0.0;
-
-    // randomly set a and b
-    do {
-      for (int i = 0; i < nn; i++) {
-        a[i] = 1.0 - (float)curand(&state) / (float)INT_MAX;
-        b[i] = 1.0 - (float)curand(&state) / (float)INT_MAX;
-        normA += a[i] * a[i];
-        normB += b[i] * b[i];
-      }
-    } while (normA < 0.1 or normB < 0.1);
-
-    normA = 1.0 / sqrt(normA);
-    normB = 1.0 / sqrt(normB);
-
-    // scale a and b to length 1
-    for (int i = 0; i < nn; i++) {
-      a[i] *= normA;
-      b[i] *= normB;
-    }
-
-    // correct c (mat(c)=mat(a)*mat(b))
-    for (int i = 0; i < n; i++) {
-      for (int j = 0; j < n; j++) {
-        c[i * n + j] = 0.0;
-        for (int k = 0; k < n; k++) {
-          c[i * n + j] += a[i * n + k] * b[k * n + j];
-        }
-      }
-    }
-
-    // c* = a* x b*
-    for (int i = 0; i < p; i++) {
-      aStar[i] = 0.0;
-      bStar[i] = 0.0;
-      for (int j = 0; j < nn; j++) {
-        aStar[i] += myWa[nn * i + j] * a[j];
-        bStar[i] += myWb[nn * i + j] * b[j];
-      }
-      cStar[i] = aStar[i] * bStar[i];
-    }
-
-    float err = 0.0;
-
-    // c_wave - c  .. Fehler in c
-    for (int i = 0; i < nn; i++) {
-      float cWave = 0.0;
-      for (int k = 0; k < p; k++) {
-        cWave += myWc[p * i + k] * cStar[k];
-      }
-      cDiff[i] = cWave - c[i];
-      err += cDiff[i] * cDiff[i];
-    }
-
-    err = sqrt(err);
-
-    if (isnan(err) || isinf(err) || isinf(-err) || err > 10000 ||
-        *killSignal > 0) {
+    if (*killSignal > 0) {
       freeGb(garbageDump, garbageCounter);
       return;
     }
 
-    if (iter % max((int)(maxNumOfIters / 5), 1000) == 0 && iter > 0) {
+    initializeAB(a, b, &state, nn, p);
+
+    calculateC(a, b, c, n);
+
+    calculateCStar(myWa, myWb, aStar, bStar, cStar, a, b, nn, p);
+
+    err = calculateCDiffAndErr(c, cStar, myWc, cDiff, nn, p);
+
+    if (printCount == printFreq) {
+      printCount = 0;
       printf("kernel: block %i, thread %i, iter %i err = %f\n", blockId,
              threadId, iter, err);
     }
+    printCount++;
 
-    // innovate Wa and Wb
-    for (int i = 0; i < p; i++) {
-      float WcTCDiff = 0.0;
-      for (int j = 0; j < nn; j++) {
-        WcTCDiff += myWc[i + j * p] * cDiff[j];
-      }
-      float WCBStar = WcTCDiff * bStar[i] * nueAB;
-      float WCAStar = WcTCDiff * aStar[i] * nueAB;
-      for (int j = 0; j < nn; j++) {
-        myWa[i * nn + j] -= WCBStar * a[j];
-        myWb[i * nn + j] -= WCAStar * b[j];
-      }
+    if (isnan(err) || isinf(err) || isinf(-err) || err > 10000) {
+      initializeWaWbWc(myWa, myWb, myWc, &state, nn, p); // Wa, Wb, Wc corrupted
     }
 
-    // innovate Wc
-    for (int i = 0; i < nn; i++) {
-      float CDiffNue = cDiff[i] * nueC;
-      for (int j = 0; j < p; j++) {
-        myWc[i * p + j] -= CDiffNue * cStar[j];
-      }
-    }
+    innovateWaAndWb(aStar, bStar, a, b, cDiff, myWa, myWb, myWc, nueAB, nn, p);
+
+    innovateWc(cStar, cDiff, myWc, nueC, nn, p);
 
     if (err < tol) {
       inTolCount++;
-      if (inTolCount > 10000) {
+      if (inTolCount > 10000) { // 10000 cycles with err < tol --> finished
         lock(mutex);
         if (*killSignal > 0) {
           unlock(mutex);
@@ -161,7 +212,7 @@ __global__ void kernel(float *Wa, float *Wb, float *Wc, int maxNumOfIters,
         atomicAdd(killSignal, 1);
         printf("kernel: Solved by block %i, thread %i with err = %f.\n ",
                blockId, threadId, err);
-        for (int i = 0; i < nn * p; i++) {
+        for (int i = 0; i < nn * p; i++) { // write back result
           Wa[i] = myWa[i];
           Wb[i] = myWb[i];
           Wc[i] = myWc[i];
@@ -171,7 +222,7 @@ __global__ void kernel(float *Wa, float *Wb, float *Wc, int maxNumOfIters,
         freeGb(garbageDump, garbageCounter);
         return;
       }
-    } else {
+    } else { // err > tol
       inTolCount = 0;
     }
   } // iter
@@ -215,11 +266,8 @@ float runBackpropOnGPU(float *Wa, float *Wb, float *Wc, int maxNumIters,
   cudaMalloc(&minErrorGPU, sizeof(float));
   cudaMemcpy(minErrorGPU, &minError, sizeof(float), cudaMemcpyHostToDevice);
   cudaMalloc(&WaGPU, nn * p * sizeof(float));
-  cudaMemcpy(WaGPU, Wa, nn * p * sizeof(float), cudaMemcpyHostToDevice);
   cudaMalloc(&WbGPU, nn * p * sizeof(float));
-  cudaMemcpy(WbGPU, Wb, nn * p * sizeof(float), cudaMemcpyHostToDevice);
   cudaMalloc(&WcGPU, nn * p * sizeof(float));
-  cudaMemcpy(WcGPU, Wc, nn * p * sizeof(float), cudaMemcpyHostToDevice);
 
   dim3 blockGrid(blocks);
   dim3 threadGrid(threads);

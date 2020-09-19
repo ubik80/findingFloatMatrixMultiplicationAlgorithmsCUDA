@@ -1,0 +1,20 @@
+#IncludeRegexLine: ^[ 	]*[#%][ 	]*(include|import)[ 	]*[<"]([^">]+)([">])
+
+#IncludeRegexScan: ^.*$
+
+#IncludeRegexComplain: ^$
+
+#IncludeRegexTransform: 
+
+/home/tillspaeth/backpropCUDA/backpropCUDA.cpp
+cuda_runtime.h
+-
+iostream
+-
+pybind11/numpy.h
+-
+pybind11/pybind11.h
+-
+pybind11/stl.h
+-
+
