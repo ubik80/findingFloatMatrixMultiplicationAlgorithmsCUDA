@@ -2,8 +2,6 @@ cmake_minimum_required(VERSION 2.8)
 find_package(CUDA)
 find_package(PythonLibs 3.6 REQUIRED)
 
-
-
 add_subdirectory(pybind11)
 
 include_directories(${PYTHON_INCLUDE_DIRS})
