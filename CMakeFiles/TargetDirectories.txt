@@ -1,5 +1,0 @@
-/home/tillspaeth/backpropCUDA/CMakeFiles/rebuild_cache.dir
-/home/tillspaeth/backpropCUDA/CMakeFiles/backpropCUDA.dir
-/home/tillspaeth/backpropCUDA/CMakeFiles/edit_cache.dir
-/home/tillspaeth/backpropCUDA/pybind11/CMakeFiles/rebuild_cache.dir
-/home/tillspaeth/backpropCUDA/pybind11/CMakeFiles/edit_cache.dir
