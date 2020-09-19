@@ -25,6 +25,7 @@ use:
 - clone this repo,
 - clone the pybind11 repo
 - do you need to install nvidia CUDA toolkit?
+- is your GPU driver suitable?
 - 'cmake .'
 - 'cmake --build .'
 - set problem size / dims with: 'python3 setNAndP.py'
