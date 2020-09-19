@@ -1,6 +1,6 @@
 
 import sys
-import backpropCUDA as bp # pybind11 module in CUDA
+import backpropCUDA as bp # pybind11 module in Cuda
 import numpy as np
 
 dims = np.load("dims.npy") # load the dimensions of the problem to solve
