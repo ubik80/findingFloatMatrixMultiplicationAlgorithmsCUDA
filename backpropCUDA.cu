@@ -22,7 +22,7 @@ __device__ void freeGb(float **garbageDump, int garbageCounter) {
 // to protect Wa, Wb, Wc and minError
 __device__ void lock(int *mutex) {
   while (atomicCAS(mutex, 0, 1) != 0) {
-  };
+  }
 }
 
 // to protect Wa, Wb, Wc and minError
