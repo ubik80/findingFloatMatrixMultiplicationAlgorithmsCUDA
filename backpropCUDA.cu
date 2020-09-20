@@ -43,11 +43,12 @@ __device__ void initializeAB(float *a, float *b, curandState_t *state, int nn,
                              int p) {
   float normA = 0.0;
   float normB = 0.0;
+  float scale = 1.0 / (float)INT_MAX;
 
   do {
     for (int i = 0; i < nn; i++) {
-      a[i] = 1.0 - (float)curand(state) / (float)INT_MAX;
-      b[i] = 1.0 - (float)curand(state) / (float)INT_MAX;
+      a[i] = 1.0 - (float)curand(state) * scale;
+      b[i] = 1.0 - (float)curand(state) * scale;
       normA += a[i] * a[i];
       normB += b[i] * b[i];
     }
@@ -64,11 +65,15 @@ __device__ void initializeAB(float *a, float *b, curandState_t *state, int nn,
 
 // calculate c (mat(c)=mat(a)*mat(b))
 __device__ void calculateC(float *a, float *b, float *c, int n) {
+  int row;
+  int idxC;
   for (int i = 0; i < n; i++) {
+    row = i * n;
     for (int j = 0; j < n; j++) {
-      c[i * n + j] = 0.0;
+      idxC = row + j;
+      c[idxC] = 0.0;
       for (int k = 0; k < n; k++) {
-        c[i * n + j] += a[i * n + k] * b[k * n + j];
+        c[idxC] += a[row + k] * b[k * n + j];
       }
     }
   }
@@ -78,12 +83,16 @@ __device__ void calculateC(float *a, float *b, float *c, int n) {
 __device__ void calculateCStar(float *Wa, float *Wb, float *aStar, float *bStar,
                                float *cStar, float *a, float *b, int nn,
                                int p) {
+  int row;
+  int idxAB;
   for (int i = 0; i < p; i++) {
     aStar[i] = 0.0;
     bStar[i] = 0.0;
+    row = i * nn;
     for (int j = 0; j < nn; j++) {
-      aStar[i] += Wa[nn * i + j] * a[j];
-      bStar[i] += Wb[nn * i + j] * b[j];
+      idxAB = row + j;
+      aStar[i] += Wa[idxAB] * a[j];
+      bStar[i] += Wb[idxAB] * b[j];
     }
     cStar[i] = aStar[i] * bStar[i];
   }
@@ -93,10 +102,12 @@ __device__ float calculateCDiffAndErr(float *c, float *cStar, float *Wc,
                                       float *cDiff, int nn, int p) {
   float cWave;
   float err = 0.0;
+  int row;
   for (int i = 0; i < nn; i++) {
     cWave = 0.0;
+    row = i * p;
     for (int k = 0; k < p; k++) {
-      cWave += Wc[p * i + k] * cStar[k];
+      cWave += Wc[row + k] * cStar[k];
     }
     cDiff[i] = cWave - c[i]; // c_wave - c is the error in c
     err += cDiff[i] * cDiff[i];
@@ -109,6 +120,7 @@ __device__ void innovateWaAndWb(float *aStar, float *bStar, float *a, float *b,
                                 float *cDiff, float *Wa, float *Wb, float *Wc,
                                 float nueAB, int nn, int p) {
   float WcTCDiff, WCAStar, WCBStar;
+  int row;
   for (int i = 0; i < p; i++) {
     WcTCDiff = 0.0;
     for (int j = 0; j < nn; j++) {
@@ -116,9 +128,10 @@ __device__ void innovateWaAndWb(float *aStar, float *bStar, float *a, float *b,
     }
     WCBStar = WcTCDiff * bStar[i] * nueAB;
     WCAStar = WcTCDiff * aStar[i] * nueAB;
+    row = i * nn;
     for (int j = 0; j < nn; j++) {
-      Wa[i * nn + j] -= WCBStar * a[j];
-      Wb[i * nn + j] -= WCAStar * b[j];
+      Wa[row + j] -= WCBStar * a[j];
+      Wb[row + j] -= WCAStar * b[j];
     }
   }
 }
@@ -127,10 +140,12 @@ __device__ void innovateWaAndWb(float *aStar, float *bStar, float *a, float *b,
 __device__ void innovateWc(float *cStar, float *cDiff, float *Wc, float nueC,
                            int nn, int p) {
   float CDiffNue;
+  int row;
   for (int i = 0; i < nn; i++) {
     CDiffNue = cDiff[i] * nueC;
+    row = i * p;
     for (int j = 0; j < p; j++) {
-      Wc[i * p + j] -= CDiffNue * cStar[j];
+      Wc[row + j] -= CDiffNue * cStar[j];
     }
   }
 }
