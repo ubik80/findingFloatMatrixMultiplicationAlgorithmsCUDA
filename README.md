@@ -24,8 +24,9 @@ https://github.com/pybind/pybind11
 use:
 - clone this repo,
 - clone the pybind11 repo
-- do you need to install nvidia CUDA toolkit?
 - is your GPU driver suitable?
+- do you need to install nvidia CUDA toolkit? Get it on the nvidia website. You might need gcc version 7 for this. 
+- now you need gcc version 6 :-)
 - 'cmake .'
 - 'cmake --build .'
 - set problem size / dims with: 'python3 setNAndP.py'
