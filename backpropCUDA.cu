@@ -4,6 +4,16 @@
 #include <float.h>
 #include <iostream>
 
+#define gpuErrchk(ans) { gpuAssert((ans), __FILE__, __LINE__); }
+inline void gpuAssert(cudaError_t code, const char *file, int line, bool abort=true)
+{
+   if (code != cudaSuccess)
+   {
+      fprintf(stderr,"GPUassert: %s %s %d\n", cudaGetErrorString(code), file, line);
+      if (abort) exit(code);
+   }
+}
+
 // memory allocation, remember pointers for cleanup later
 __device__ float *mallocGb(int numOfFloats, float **garbageDump,
                            int garbageCounter) {
@@ -153,6 +163,7 @@ __device__ void innovateWc(float *cStar, float *cDiff, float *Wc, float nueC,
 __global__ void kernel(float *Wa, float *Wb, float *Wc, int maxNumOfIters,
                        float nueAB, float nueC, float tol, int n, int p,
                        int seed, int *killSignal, int *mutex, float *minError) {
+
   float *garbageDump[10]; // for cleanup before return
   int garbageCounter = 0;
 
@@ -171,10 +182,9 @@ __global__ void kernel(float *Wa, float *Wb, float *Wc, int maxNumOfIters,
   float *cStar = (float *)mallocGb(p, garbageDump, garbageCounter);
   float *cDiff = (float *)mallocGb(nn, garbageDump, garbageCounter);
 
-  int startVal =
-      abs((seed + blockId * 3 + threadId * 7 + blockId * threadId * 11 +
-           ((int)clock() / 10000000) % INT_MAX) %
-          INT_MAX);
+  int startVal = abs((seed + blockId * 3 + threadId * 7 + blockId * threadId * 11
+                    + ((int)clock() / 10000000) % INT_MAX) % INT_MAX);
+
   curandState_t state;
   curand_init(startVal, threadId + blockId, 13, &state);
 
@@ -182,7 +192,7 @@ __global__ void kernel(float *Wa, float *Wb, float *Wc, int maxNumOfIters,
 
   int inTolCount = 0;                // counts iterations with err < tol
   int printCount = 0;                // for cmdl output
-  int printFreq = maxNumOfIters / 5; // how often to print
+  int printFreq = (int)(maxNumOfIters / 4); // how often to print
   float err;
 
   for (int iter = 0; iter < maxNumOfIters; iter++) {
@@ -202,8 +212,7 @@ __global__ void kernel(float *Wa, float *Wb, float *Wc, int maxNumOfIters,
 
     if (printCount == printFreq) {
       printCount = 0;
-      printf("kernel: block %i, thread %i, iter %i err = %f\n", blockId,
-             threadId, iter, err);
+      printf("kernel: block %i, thread %i, iter %i, err = %f\n", blockId, threadId, iter, err);
     }
     printCount++;
 
@@ -249,24 +258,21 @@ float runBackpropOnGPU(float *Wa, float *Wb, float *Wc, int maxNumIters,
                        int seed, int blocks, int threads) {
 
   std::cout << "runBackpropOnGPU: n = " << n << ", p = " << p << '\n';
-  std::cout << "runBackpropOnGPU: blocks = " << blocks
-            << ", threads = " << threads << '\n';
+  std::cout << "runBackpropOnGPU: blocks = " << blocks << ", threads = " << threads << '\n';
 
   int nn = n * n;
 
   size_t grantedMemSize;
-  size_t demandedMemSize =
-      (nn * p * 3 + nn * 4 + p * 3) * sizeof(float) * blocks * threads * 2;
+  size_t demandedMemSize = (nn * p * 3 + nn * 4 + p * 3) * sizeof(float) * blocks * threads * 2;
+
   cudaDeviceGetLimit(&grantedMemSize, cudaLimitMallocHeapSize);
-  cudaDeviceSetLimit(cudaLimitMallocHeapSize,
-                     max(grantedMemSize, demandedMemSize));
+  cudaDeviceSetLimit(cudaLimitMallocHeapSize, max(grantedMemSize, demandedMemSize));
   cudaDeviceGetLimit(&grantedMemSize, cudaLimitMallocHeapSize);
-  std::cout << "runBackpropOnGPU: demandedMemSize = " << demandedMemSize
-            << '\n';
+
+  std::cout << "runBackpropOnGPU: demandedMemSize = " << demandedMemSize << '\n';
   std::cout << "runBackpropOnGPU: grantedMemSize =  " << grantedMemSize << '\n';
 
-  if (grantedMemSize < demandedMemSize)
-    return FLT_MAX; // mem. allocation declined
+  if (grantedMemSize < demandedMemSize) return FLT_MAX; // mem. allocation declined
 
   cudaFuncSetCacheConfig(kernel, cudaFuncCachePreferL1);
 
@@ -286,9 +292,13 @@ float runBackpropOnGPU(float *Wa, float *Wb, float *Wc, int maxNumIters,
 
   dim3 blockGrid(blocks);
   dim3 threadGrid(threads);
+
   kernel<<<blockGrid, threadGrid>>>(WaGPU, WbGPU, WcGPU, maxNumIters, nueAB,
                                     nueC, tol, n, p, seed, killSignal, mutex,
                                     minErrorGPU);
+
+  gpuErrchk( cudaPeekAtLastError() );
+  gpuErrchk( cudaDeviceSynchronize() );
 
   cudaMemcpy(&minError, minErrorGPU, sizeof(float), cudaMemcpyDeviceToHost);
   cudaMemcpy(Wa, WaGPU, nn * p * sizeof(float), cudaMemcpyDeviceToHost);
@@ -302,7 +312,7 @@ float runBackpropOnGPU(float *Wa, float *Wb, float *Wc, int maxNumIters,
   cudaFree(WbGPU);
   cudaFree(WcGPU);
 
-  cudaThreadExit();
+  cudaDeviceReset();
 
   std::cout << "runBackpropOnGPU: finished" << '\n';
   return minError;

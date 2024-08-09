@@ -2,6 +2,6 @@
 import numpy as np
 
 # for initial setting of problem size
-n = 3
-p = n*n*n+1
+n = 2
+p = n*n*n
 np.save("dims", [n, p])
