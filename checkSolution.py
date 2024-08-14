@@ -1,5 +1,6 @@
 import numpy as np
 
+
 solution = np.load("solution_n3_p23.npy")
 
 Wa = solution[0]
