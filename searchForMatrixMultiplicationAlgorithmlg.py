@@ -2,6 +2,7 @@ import sys
 import backpropCUDA as bp # pybind11 module in Cuda
 import numpy as np
 
+
 dims = np.load("dims.npy") # load the dimensions of the problem to solve
 n = dims[0] # matrix dimensions of A and B
 p = dims[1] # number of products
