@@ -4,6 +4,7 @@
 #include <float.h>
 #include <iostream>
 
+
 #define gpuErrchk(ans) { gpuAssert((ans), __FILE__, __LINE__); }
 inline void gpuAssert(cudaError_t code, const char *file, int line, bool abort=true)
 {
@@ -14,6 +15,7 @@ inline void gpuAssert(cudaError_t code, const char *file, int line, bool abort=t
    }
 }
 
+
 // memory allocation, remember pointers for cleanup later
 __device__ float *mallocGb(int numOfFloats, float **garbageDump,
                            int garbageCounter) {
@@ -22,6 +24,7 @@ __device__ float *mallocGb(int numOfFloats, float **garbageDump,
   return garbageDump[garbageCounter - 1];
 }
 
+
 // free all allocated (pointers in garbageDump)
 __device__ void freeGb(float **garbageDump, int garbageCounter) {
   for (int i = 0; i < garbageCounter; i++) {
@@ -29,11 +32,13 @@ __device__ void freeGb(float **garbageDump, int garbageCounter) {
   }
 }
 
+
 // to protect Wa, Wb, Wc and minError
 __device__ void lock(int *mutex) {
   while (atomicCAS(mutex, 0, 1) != 0) {
   }
 }
+
 
 // to protect Wa, Wb, Wc and minError
 __device__ void unlock(int *mutex) { atomicExch(mutex, 0); }
@@ -47,6 +52,7 @@ __device__ void initializeWaWbWc(float *Wa, float *Wb, float *Wc,
     Wc[i] = 1.0 - (float)curand(state) / (float)INT_MAX;
   }
 }
+
 
 // randomly set a and b, and scale to length 1
 __device__ void initializeAB(float *a, float *b, curandState_t *state, int nn,
@@ -73,6 +79,7 @@ __device__ void initializeAB(float *a, float *b, curandState_t *state, int nn,
   }
 }
 
+
 // calculate c (mat(c)=mat(a)*mat(b))
 __device__ void calculateC(float *a, float *b, float *c, int n) {
   int row;
@@ -88,6 +95,7 @@ __device__ void calculateC(float *a, float *b, float *c, int n) {
     }
   }
 }
+
 
 // c* = a* x b*
 __device__ void calculateCStar(float *Wa, float *Wb, float *aStar, float *bStar,
@@ -108,6 +116,7 @@ __device__ void calculateCStar(float *Wa, float *Wb, float *aStar, float *bStar,
   }
 }
 
+
 __device__ float calculateCDiffAndErr(float *c, float *cStar, float *Wc,
                                       float *cDiff, int nn, int p) {
   float cWave;
@@ -124,6 +133,7 @@ __device__ float calculateCDiffAndErr(float *c, float *cStar, float *Wc,
   }
   return sqrt(err);
 }
+
 
 // innovate Wa and Wb
 __device__ void innovateWaAndWb(float *aStar, float *bStar, float *a, float *b,
@@ -146,6 +156,7 @@ __device__ void innovateWaAndWb(float *aStar, float *bStar, float *a, float *b,
   }
 }
 
+
 // innovate Wc
 __device__ void innovateWc(float *cStar, float *cDiff, float *Wc, float nueC,
                            int nn, int p) {
@@ -159,6 +170,7 @@ __device__ void innovateWc(float *cStar, float *cDiff, float *Wc, float nueC,
     }
   }
 }
+
 
 __global__ void kernel(float *Wa, float *Wb, float *Wc, int maxNumOfIters,
                        float nueAB, float nueC, float tol, int n, int p,
@@ -251,6 +263,7 @@ __global__ void kernel(float *Wa, float *Wb, float *Wc, int maxNumOfIters,
     }
   } // iter
 } // kernel()
+
 
 // memory operations and starting of kernels on GPU
 float runBackpropOnGPU(float *Wa, float *Wb, float *Wc, int maxNumIters,
