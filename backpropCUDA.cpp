@@ -7,10 +7,12 @@
 
 namespace py = pybind11;
 
+
 // implemented in the .cu file, calls kernels on GPU
 float runBackpropOnGPU(float *Wa, float *Wb, float *Wc, int maxNumIters,
                        float nueAB, float nueC, float tol, int n, int p,
                        int seed, int blocks, int threads);
+
 
 // to be called from python, through pybind11
 float backpropCUDA(py::array_t<float> _Wa, py::array_t<float> _Wb, py::array_t<float> _Wc,
@@ -49,7 +51,3 @@ float backpropCUDA(py::array_t<float> _Wa, py::array_t<float> _Wb, py::array_t<f
 PYBIND11_MODULE(backpropCUDA, m) {
   m.def("backpropCUDA", &backpropCUDA);
 }
-
-
-
-
