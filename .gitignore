@@ -1,8 +1,8 @@
-./CMakeFiles
+./CMakeFiles/*
 
 CMakeCache.txt
 cmake_install.cmake
 Makefile
 
 *.npy
-*.so
+*.sopy
