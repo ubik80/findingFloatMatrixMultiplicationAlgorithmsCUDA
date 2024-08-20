@@ -205,8 +205,6 @@ __global__ void kernel(float *Wa, float *Wb, float *Wc, int maxNumOfIters,
   initializeWaWbWc(myWa, myWb, myWc, &state, nn, p);
 
   int inTolCount = 0; // counts iterations with err < tol
-  //int printFreq = (int)(maxNumOfIters / 3); // how often to print to cmdl
-  //int printCount = startVal % printFreq; // for cmdl output
   float err;
 
   for (int iter = 0; iter < maxNumOfIters; iter++) {
@@ -223,12 +221,6 @@ __global__ void kernel(float *Wa, float *Wb, float *Wc, int maxNumOfIters,
     calculateCStar(myWa, myWb, aStar, bStar, cStar, a, b, nn, p);
 
     err = calculateCDiffAndErr(c, cStar, myWc, cDiff, nn, p);
-
-    //if (printCount == printFreq) {
-    //  printCount = 0;
-    //  printf("kernel: block %i, thread %i, iter %i, err = %f\n", blockId, threadId, iter, err);
-    //}
-    //printCount++;
 
     if (isnan(err) || isinf(err) || isinf(-err) || err > 10000) {
       initializeWaWbWc(myWa, myWb, myWc, &state, nn, p); // Wa, Wb, Wc corrupted

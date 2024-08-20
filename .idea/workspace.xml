@@ -5,11 +5,8 @@
   </component>
   <component name="ChangeListManager">
     <list default="true" id="dbf16324-e7d1-4db1-993c-3e0ef37a79b9" name="Changes" comment="">
-      <change beforePath="$PROJECT_DIR$/backpropCUDA.cpp" beforeDir="false" afterPath="$PROJECT_DIR$/backpropCUDA.cpp" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/backpropCUDA.cu" beforeDir="false" afterPath="$PROJECT_DIR$/backpropCUDA.cu" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/checkSolution.py" beforeDir="false" afterPath="$PROJECT_DIR$/checkSolution.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/dims.npy" beforeDir="false" afterPath="$PROJECT_DIR$/dims.npy" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/searchForMatrixMultiplicationAlgorithmlg.py" beforeDir="false" afterPath="$PROJECT_DIR$/searchForMatrixMultiplicationAlgorithmlg.py" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/setNAndP.py" beforeDir="false" afterPath="$PROJECT_DIR$/setNAndP.py" afterDir="false" />
     </list>
     <option name="SHOW_DIALOG" value="false" />
     <option name="HIGHLIGHT_CONFLICTS" value="true" />
@@ -40,7 +37,7 @@
     "Python.searchForMatrixMultiplicationAlgorithmlg.executor": "Debug",
     "Python.setNAndP.executor": "Run",
     "RunOnceActivity.ShowReadmeOnStart": "true",
-    "git-widget-placeholder": "Merging master",
+    "git-widget-placeholder": "master",
     "last_opened_file_path": "/home/till/findingFloatMatrixMultiplicationAlgorithmsCUDA"
   }
 }]]></component>

@@ -9,8 +9,8 @@ n = dims[0] # matrix dimensions of A and B
 p = dims[1] # number of products
 nn = n * n
 
-numOfBlocks = 46 # number of CUDA blocks to use
-numOfThreads = 128 #64 # number of threads per block
+numOfBlocks = 46 # number of CUDA blocks to use (RTX4070)
+numOfThreads = 128 #64 # number of threads per block (RTX4070)
 
 nueAB = 0.1 # learning rate for Wa and Wb
 nueC = 0.1 # learning rate for Wc
