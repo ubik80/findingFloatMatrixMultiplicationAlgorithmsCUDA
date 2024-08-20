@@ -1,5 +1,0 @@
-/home/till/findingFloatMatrixMultiplicationAlgorithmsCUDA/CMakeFiles/backpropCUDA.dir
-/home/till/findingFloatMatrixMultiplicationAlgorithmsCUDA/CMakeFiles/edit_cache.dir
-/home/till/findingFloatMatrixMultiplicationAlgorithmsCUDA/CMakeFiles/rebuild_cache.dir
-/home/till/findingFloatMatrixMultiplicationAlgorithmsCUDA/pybind11/CMakeFiles/edit_cache.dir
-/home/till/findingFloatMatrixMultiplicationAlgorithmsCUDA/pybind11/CMakeFiles/rebuild_cache.dir
