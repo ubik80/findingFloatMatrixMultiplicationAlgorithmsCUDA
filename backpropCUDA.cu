@@ -195,16 +195,18 @@ __global__ void kernel(float *Wa, float *Wb, float *Wc, int maxNumOfIters,
   float *cDiff = (float *)mallocGb(nn, garbageDump, garbageCounter);
 
   int startVal = abs((seed + blockId * 3 + threadId * 7 + blockId * threadId * 11
-                    + ((int)clock() / 10000000) % INT_MAX) % INT_MAX);
+                    + ((int)clock() % INT_MAX)) % INT_MAX);
+
+  //printf("kernel: block %i, thread %i, startVal %i\n", blockId, threadId, startVal);
 
   curandState_t state;
   curand_init(startVal, threadId + blockId, 13, &state);
 
   initializeWaWbWc(myWa, myWb, myWc, &state, nn, p);
 
-  int inTolCount = 0;                // counts iterations with err < tol
-  int printCount = 0;                // for cmdl output
-  int printFreq = (int)(maxNumOfIters / 4); // how often to print
+  int inTolCount = 0; // counts iterations with err < tol
+  //int printFreq = (int)(maxNumOfIters / 3); // how often to print to cmdl
+  //int printCount = startVal % printFreq; // for cmdl output
   float err;
 
   for (int iter = 0; iter < maxNumOfIters; iter++) {
@@ -222,11 +224,11 @@ __global__ void kernel(float *Wa, float *Wb, float *Wc, int maxNumOfIters,
 
     err = calculateCDiffAndErr(c, cStar, myWc, cDiff, nn, p);
 
-    if (printCount == printFreq) {
-      printCount = 0;
-      printf("kernel: block %i, thread %i, iter %i, err = %f\n", blockId, threadId, iter, err);
-    }
-    printCount++;
+    //if (printCount == printFreq) {
+    //  printCount = 0;
+    //  printf("kernel: block %i, thread %i, iter %i, err = %f\n", blockId, threadId, iter, err);
+    //}
+    //printCount++;
 
     if (isnan(err) || isinf(err) || isinf(-err) || err > 10000) {
       initializeWaWbWc(myWa, myWb, myWc, &state, nn, p); // Wa, Wb, Wc corrupted
@@ -246,7 +248,7 @@ __global__ void kernel(float *Wa, float *Wb, float *Wc, int maxNumOfIters,
           return;
         }
         atomicAdd(killSignal, 1);
-        printf("kernel: Solved by block %i, thread %i with err = %f.\n ",
+        printf("kernel: Solved by block %i, thread %i with err = %f.\n",
                blockId, threadId, err);
         for (int i = 0; i < nn * p; i++) { // write back result
           Wa[i] = myWa[i];

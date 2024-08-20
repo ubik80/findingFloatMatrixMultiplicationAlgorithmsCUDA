@@ -27,3 +27,5 @@ WbB = np.matmul(Wb, flat_B)
 C_star = np.multiply(WaA, WbB)
 
 elser_C = np.matmul(Wc, C_star)
+
+pass

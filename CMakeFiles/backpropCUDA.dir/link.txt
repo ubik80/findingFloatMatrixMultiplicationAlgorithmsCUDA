@@ -1,0 +1,1 @@
+/usr/bin/c++ -fPIC  -std=c++11 -shared -Wl,-soname,backpropCUDA.so -o backpropCUDA.so CMakeFiles/backpropCUDA.dir/backpropCUDA.cpp.o CMakeFiles/backpropCUDA.dir/backpropCUDA_generated_backpropCUDA.cu.o   -L/usr/local/cuda/lib64  -Wl,-rpath,/usr/local/cuda/lib64 /usr/local/cuda/lib64/libcudart_static.a -ldl -Wl,-Bstatic -lrt -Wl,-Bdynamic -lpython3.10 -lcudart 
