@@ -1,5 +1,4 @@
-
-Cuda implementation of backpropagation for finding matrix-multiplication-algorithms with p products for n x n matrices. 
+#Cuda implementation of backpropagation for finding matrix-multiplication-algorithms with p products for n x n matrices
 
 Basically, n (matrix size) and p (number of products to use in MM-Algorithm) are set. Then 'python3 searchForMatrixMultiplicationAlgorithms' is started. If you are lucky, it will return the MM-Algorithm.
 
