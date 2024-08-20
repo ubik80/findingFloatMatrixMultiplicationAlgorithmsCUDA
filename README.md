@@ -30,7 +30,7 @@ use:
 - 'cmake --build .'
 - set problem size / dims with: 'python3 setNAndP.py'
 - start with: 'python3 searchForMatrixMultiplicationAlgorithms'
-- check found solution with 'checkSolution.py'
+- check found solution with 'python3 checkSolution.py'
 
 
 
