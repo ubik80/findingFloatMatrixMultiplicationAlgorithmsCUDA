@@ -54,6 +54,6 @@ while True: # endlessly search for even better algorithms (lower p)
             print("err > tol, err = " + str(err))
             quit()
 
+    p -= 1 # repeat with less products ...
     np.save("dims", [n, p])
     np.save("solution_n" + str(n) + "_p" + str(p), [Wa, Wb, Wc.T]) # save solution
-    p -= 1 # repeat with less products ...
